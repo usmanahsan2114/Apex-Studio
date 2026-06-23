@@ -1,0 +1,9 @@
+# Apex Studio — offline/free dependencies
+flask
+kokoro-onnx
+soundfile
+imageio-ffmpeg
+numpy==1.26.2
+scipy
+Pillow
+# Also required (already on a typical Windows box): Google Chrome (for rendering)

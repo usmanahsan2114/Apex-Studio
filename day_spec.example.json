@@ -1,0 +1,68 @@
+{
+  "id": "cost_of_cheap",
+  "date": "2026-06-23",
+  "topic": "A cheap website is the most expensive one you'll ever buy (Rs framing)",
+  "theme": "dark",
+  "carousel": {
+    "kicker": "Cost of Cheap",
+    "slides": [
+      {
+        "motif": "Rs 25,000 -> Rs 90,000",
+        "headline": ["The cheap website is", "the **most expensive**", "one you'll ever buy."],
+        "sub": "You didn't save money upfront. You financed the rebuild at a brutal rate."
+      },
+      {
+        "tag": "The real bill",
+        "headline": ["Rs 25,000 to build.", "**Rs 90,000** to fix."],
+        "sub": "Add the rebuild, the leads that bounced, and the ad spend burned on a broken page.",
+        "meter": { "head": "What \"cheap\" actually costs", "left": "Rs 25k + the hidden invoice", "right": "Built right, once" }
+      },
+      {
+        "headline": ["You never paid less.", "You just delayed the", "**invoice** six months."],
+        "sub": "Cheap isn't a price. It's a loan against your future revenue, with interest."
+      },
+      {
+        "tag": "The fix",
+        "headline": ["Build it right once.", "Then **scale** the demand."],
+        "build_chips": ["Clean architecture", "Built to scale"],
+        "growth_chips": ["Profitable ad spend", "Page that converts"]
+      },
+      {
+        "headline": ["Pay once for quality.", "Or **forever** for mistakes."],
+        "sub": "Build the system. Turn it into demand. In that order.",
+        "cta": "Curious what your \"cheap\" build is quietly costing you? DM \"AUDIT\" and we'll price the real bill, free."
+      }
+    ],
+    "linkedin": {
+      "caption": "The cheapest website I ever saw a founder buy cost him Rs 90,000. He just paid it in installments he never agreed to.\n\nSwipe through the 5-slide breakdown.\n\nA cheap build doesn't save money. It defers the cost to a worse moment: the rebuild when it can't scale, the leads that bounced off a slow page, and every rupee of ad spend poured onto a site that couldn't convert.\n\nSpend once, correctly. Apex IT builds the system to last; Apex Marketings turns it into demand.\n\nDM \"AUDIT\" and we'll price what your current build is quietly costing you, free.\n\nWhat's one thing you bought cheap that ended up costing you double?",
+      "hashtags": ["#FounderLessons", "#WebDevelopment", "#B2BMarketing"]
+    },
+    "fb": {
+      "caption": "Save this before you hire the lowest bidder.\n\nThe cheapest website is almost always the most expensive one. You save Rs 25k upfront, then quietly pay Rs 90k later in the rebuild, the bounced leads, and the ad spend burned on a page that couldn't convert.\n\nCheap isn't a price. It's a loan against your future revenue. The fix: build it right once, then scale the demand.\n\nDM \"AUDIT\" and we'll price the real bill, free.",
+      "hashtags": ["#smallbusinesspakistan", "#founders", "#webdesign", "#webdevelopment", "#digitalmarketing", "#karachi", "#lahore", "#ecommerce", "#businessgrowth", "#roi"]
+    }
+  },
+  "video": {
+    "kicker": "Cost of Cheap",
+    "music_mood": "tense",
+    "motif_name": "none",
+    "motif_scenes": [],
+    "narration": [
+      { "text": "Here's the uncomfortable truth about a cheap website. It's the most expensive one you'll ever buy.", "speed": 1.0 },
+      { "text": "You save twenty-five thousand rupees upfront. Then you pay ninety thousand to fix it.", "speed": 1.02 },
+      { "text": "The rebuild, the leads that bounced, the ad spend burned on a page that couldn't convert.", "speed": 1.03 },
+      { "text": "You never paid less. You just delayed the invoice six months.", "speed": 0.97 },
+      { "text": "So build it right once. Apex I-T builds the system; Apex Marketings turns it into demand.", "speed": 1.0 },
+      { "text": "D-M AUDIT, and we'll price what your cheap build is quietly costing you.", "speed": 1.0 }
+    ],
+    "scenes": [
+      { "headline": ["The cheap website is", "the **most expensive**", "one you'll ever buy."], "big": true },
+      { "tag": "The real bill", "headline": ["Rs 25,000 to build.", "**Rs 90,000** to fix."], "sub": "Rebuild + bounced leads + wasted ad spend." },
+      { "headline": ["You never paid less.", "You just delayed the", "**invoice** six months."], "big": true },
+      { "headline": ["Cheap isn't a price.", "It's a **loan**."], "sub": "Against your future revenue, with interest." },
+      { "tag": "The fix", "headline": ["Build it right", "**once**."], "build_chips": ["Clean architecture", "Built to scale"], "growth_chips": ["Profitable spend", "Page that converts"] },
+      { "headline": ["Pay once for quality.", "Or **forever** for mistakes."], "cta": "DM \"AUDIT\" — we'll price the real bill, free." }
+    ],
+    "caption": "Sound on. 🔊 The cheapest website is the most expensive one you'll ever buy.\n\nYou save Rs 25k upfront, then pay Rs 90k later — the rebuild, the bounced leads, the ad spend burned on a page that couldn't convert. You never paid less; you just delayed the invoice.\n\nBuild it right once. Apex IT builds the system; Apex Marketings turns it into demand.\n\nDM \"AUDIT\" and we'll price what your cheap build is quietly costing you, free.\n\nWhat's the most expensive 'cheap' thing you've bought for your business?\n\n#FounderLessons #WebDevelopment #B2BMarketing #smallbusinesspakistan #founders #roi #digitalmarketing #webdesign"
+  }
+}

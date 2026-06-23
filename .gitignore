@@ -1,0 +1,35 @@
+# ── Voice model — ~350 MB, auto-downloaded by setup.bat (too large for git) ──
+assets/
+
+# ── Generated output (carousels + videos are produced locally) ──
+generated_images/
+
+# ── Legacy / archived files (kept locally, not part of the app) ──
+extra/
+
+# ── Runtime working file (last generated spec; see day_spec.example.json) ──
+day_spec.json
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.Python
+
+# ── Scratch / temp ──
+_*.png
+_*.wav
+_smoke_*.png
+*.log
+*.tmp
+
+# ── OS / editor / tooling ──
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+.claude/
