@@ -80,6 +80,150 @@ window.motifSet=function(i,p){
 };
 """
 
+# ---- expanded motif library (visibility via MS.indexOf(i): -1 hide, 0 idle, >=1 animate) ----
+def motif_bar_grow(P):
+    bars=[0.42,0.66,0.52,0.82,1.0]; x0=70; bw=44; gap=24; base=222
+    rects="".join(
+        f'<rect id="bar{j}" x="{x0+j*(bw+gap)}" y="{base}" width="{bw}" height="0" rx="5" '
+        f'fill="{P["amber"] if j==len(bars)-1 else P["text_primary"]}" opacity="0.92"/>'
+        for j in range(len(bars)))
+    return (f'<svg class="bars" width="400" height="250" viewBox="0 0 400 250" fill="none">'
+            f'<line x1="50" y1="{base}" x2="372" y2="{base}" stroke="{P["hairline"]}" stroke-width="2"/>{rects}</svg>')
+MOTIF_JS_BAR_GROW = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var base=222,maxh=176,fr=[0.42,0.66,0.52,0.82,1.0];
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.04:1.0)+')';
+ for(var j=0;j<5;j++){var b=document.getElementById('bar'+j);if(!b)continue;
+   var u=(k>=1)?E.outBack(c01((p-0.12-j*0.06)/0.6)):0;var h=maxh*fr[j]*u;
+   b.setAttribute('height',(h>0?h:0).toFixed(1));b.setAttribute('y',(base-(h>0?h:0)).toFixed(1));}
+};
+"""
+
+def motif_line_trend(P):
+    return (f'<svg class="ltr" width="400" height="250" viewBox="0 0 400 250" fill="none">'
+            f'<line x1="56" y1="214" x2="360" y2="214" stroke="{P["hairline"]}" stroke-width="2"/>'
+            f'<polyline id="ltp" points="60,210 120,196 180,168 240,176 300,120 356,70" fill="none" '
+            f'stroke="{P["amber"]}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<circle id="ltd" cx="356" cy="70" r="9" fill="{P["amber"]}" opacity="0"/></svg>')
+MOTIF_JS_LINE_TREND = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var ln=document.getElementById('ltp'),dt=document.getElementById('ltd');if(!ln)return;
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.04:1.0)+')';
+ var L=ln.getTotalLength();ln.style.strokeDasharray=L;
+ var u=(k>=1)?E.outCubic(c01((p-0.1)/0.74)):0;ln.style.strokeDashoffset=(L*(1-u)).toFixed(1);
+ if(dt)dt.setAttribute('opacity',(u>0.92?1:0).toString());
+};
+"""
+
+def motif_growth_curve(P):
+    return (f'<svg class="gcv" width="410" height="250" viewBox="0 0 410 250" fill="none">'
+            f'<line x1="58" y1="216" x2="362" y2="216" stroke="{P["hairline"]}" stroke-width="2"/>'
+            f'<line x1="58" y1="216" x2="58" y2="38" stroke="{P["hairline"]}" stroke-width="2"/>'
+            f'<polyline id="gcp" points="60,212 130,206 195,190 250,158 296,104 346,44" fill="none" '
+            f'stroke="{P["amber"]}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<circle id="gcd" cx="346" cy="44" r="9" fill="{P["amber"]}" opacity="0"/></svg>')
+MOTIF_JS_GROWTH = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var ln=document.getElementById('gcp'),dt=document.getElementById('gcd');if(!ln)return;
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.05:1.0)+')';
+ var L=ln.getTotalLength();ln.style.strokeDasharray=L;
+ var u=(k>=1)?E.inOutCubic(c01((p-0.1)/0.76)):0;ln.style.strokeDashoffset=(L*(1-u)).toFixed(1);
+ if(dt)dt.setAttribute('opacity',(u>0.9?1:0).toString());
+};
+"""
+
+def motif_funnel(P):
+    widths=[300,238,176,120]; cx=200; y0=54; gap=52; h=38
+    bars="".join(
+        f'<rect id="fn{j}" x="{cx-wd/2:.0f}" y="{y0+j*gap}" width="{wd}" height="{h}" rx="6" '
+        f'fill="{P["amber"] if j==len(widths)-1 else P["text_primary"]}" opacity="0"/>'
+        for j,wd in enumerate(widths))
+    return f'<svg class="fnl" width="400" height="280" viewBox="0 0 400 280" fill="none">{bars}</svg>'
+MOTIF_JS_FUNNEL = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.04:1.0)+')';
+ for(var j=0;j<4;j++){var b=document.getElementById('fn'+j);if(!b)continue;
+   var u=(k>=1)?E.outCubic(c01((p-0.12-j*0.12)/0.5)):0;
+   b.setAttribute('opacity',(0.16+0.76*c01(u)).toFixed(3));}
+};
+"""
+
+def motif_donut(P):
+    import math; cx,cy,r=150,150,108; circ=2*math.pi*r
+    return (f'<svg class="dnt" width="300" height="300" viewBox="0 0 300 300" fill="none">'
+            f'<circle cx="{cx}" cy="{cy}" r="{r}" stroke="{P["hairline"]}" stroke-width="14"/>'
+            f'<circle id="dpr" cx="{cx}" cy="{cy}" r="{r}" stroke="{P["amber"]}" stroke-width="14" stroke-linecap="round" '
+            f'stroke-dasharray="{circ:.1f}" stroke-dashoffset="{circ:.1f}" transform="rotate(-90 {cx} {cy})"/>'
+            f'<text id="dpn" x="{cx}" y="{cy+4}" text-anchor="middle" dominant-baseline="central" '
+            f'font-family="Segoe UI,Arial" font-weight="800" font-size="74" fill="{P["text_primary"]}" letter-spacing="-3">0%</text></svg>')
+MOTIF_JS_DONUT = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var ring=document.getElementById('dpr'),num=document.getElementById('dpn');var C=2*Math.PI*108,T=0.73;
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.05:1.0)+')';
+ var u=(k>=1)?E.outCubic(c01((p-0.1)/0.78)):0;var frac=T*u;
+ if(ring)ring.setAttribute('stroke-dashoffset',(C*(1-frac)).toFixed(1));
+ if(num)num.textContent=Math.round(100*frac)+'%';
+};
+"""
+
+def motif_arrow(P):
+    return (f'<svg class="arw" width="300" height="280" viewBox="0 0 300 280" fill="none">'
+            f'<rect x="120" y="118" width="60" height="150" rx="8" fill="{P["text_primary"]}" opacity="0.22"/>'
+            f'<g id="arwg"><path d="M150,40 L226,150 L176,150 L176,250 L124,250 L124,150 L74,150 Z" fill="{P["amber"]}"/></g></svg>')
+MOTIF_JS_ARROW = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var g=document.getElementById('arwg');
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.05:1.0)+')';
+ var u=(k>=1)?E.outBack(c01((p-0.12)/0.6)):0;
+ if(g){g.setAttribute('transform','translate(0 '+((1-c01(u))*70).toFixed(1)+')');g.style.opacity=c01(u*1.3).toFixed(3);}
+};
+"""
+
+def motif_coins(P):
+    cx=150; ew=84; eh=26; base=240; gap=30
+    coins="".join(
+        f'<ellipse id="cn{j}" cx="{cx}" cy="{base-j*gap}" rx="{ew}" ry="{eh}" '
+        f'fill="{P["amber"] if j==4 else P["text_primary"]}" opacity="0"/>'
+        for j in range(5))
+    return f'<svg class="coins" width="300" height="290" viewBox="0 0 300 290" fill="none">{coins}</svg>'
+MOTIF_JS_COINS = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.04:1.0)+')';
+ for(var j=0;j<5;j++){var c=document.getElementById('cn'+j);if(!c)continue;
+   var u=(k>=1)?E.outBack(c01((p-0.1-j*0.09)/0.5)):0;
+   c.setAttribute('opacity',(c01(u)*(j==4?0.96:0.85)).toFixed(3));
+   c.setAttribute('transform','translate(0 '+((1-c01(u))*18).toFixed(1)+')');}
+};
+"""
+
+def motif_radar(P):
+    cx,cy=150,150
+    rings="".join(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{P["ring"]}" stroke-width="1.5"/>' for r in (44,82,118))
+    cross=(f'<line x1="{cx-118}" y1="{cy}" x2="{cx+118}" y2="{cy}" stroke="{P["ring"]}" stroke-width="1"/>'
+           f'<line x1="{cx}" y1="{cy-118}" x2="{cx}" y2="{cy+118}" stroke="{P["ring"]}" stroke-width="1"/>')
+    return (f'<svg class="rdr" width="300" height="300" viewBox="0 0 300 300" fill="none">{rings}{cross}'
+            f'<line id="rsw" x1="{cx}" y1="{cy}" x2="{cx}" y2="{cy-118}" stroke="{P["amber"]}" stroke-width="3" stroke-linecap="round"/>'
+            f'<circle id="rbl" cx="{cx}" cy="{cy-82}" r="0" fill="{P["amber"]}"/>'
+            f'<circle cx="{cx}" cy="{cy}" r="5" fill="{P["amber"]}"/></svg>')
+MOTIF_JS_RADAR = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var sw=document.getElementById('rsw'),bl=document.getElementById('rbl');
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(k>=1?1.04:1.0)+')';
+ var u=(k>=1)?c01((p-0.05)/0.9):0;var ang=u*340;
+ if(sw)sw.setAttribute('transform','rotate('+ang.toFixed(1)+' 150 150)');
+ var br=(u>0.62&&u<0.86)?E.outBack(c01((u-0.62)/0.12))*7:(u>=0.86?7:0);
+ if(bl)bl.setAttribute('r',(br>0?br:0).toFixed(1));
+};
+"""
+
 CONCEPTS = {
     "site_speed": dict(
         id="site_speed",
@@ -183,8 +327,46 @@ CONCEPTS = {
 MOTIFS = {
     "speedometer": (motif_speedometer, MOTIF_JS_SPEEDOMETER),
     "countring": (motif_countring, MOTIF_JS_COUNTRING),
+    "bar_grow": (motif_bar_grow, MOTIF_JS_BAR_GROW),
+    "line_trend": (motif_line_trend, MOTIF_JS_LINE_TREND),
+    "growth_curve": (motif_growth_curve, MOTIF_JS_GROWTH),
+    "funnel": (motif_funnel, MOTIF_JS_FUNNEL),
+    "donut_progress": (motif_donut, MOTIF_JS_DONUT),
+    "arrow_up": (motif_arrow, MOTIF_JS_ARROW),
+    "roi_coins": (motif_coins, MOTIF_JS_COINS),
+    "radar_sweep": (motif_radar, MOTIF_JS_RADAR),
     "none": (lambda P: "", ""),
 }
+
+# topic/headline keyword -> motif (used when the spec leaves motif_name "auto"/absent)
+MOTIF_KEYWORDS = {
+    "speedometer":   ["speed", "fast", "slow", "load", "loading", "performance", "second", "latency", "page speed"],
+    "countring":     ["countdown", "10 second", "ticking", "clock", "time to decide"],
+    "bar_grow":      ["revenue", "growth", "increase", "more leads", "double", "sales", "results", "traffic"],
+    "line_trend":    ["trend", "over time", "month", "trajectory", "trending", "graph"],
+    "growth_curve":  ["compound", "exponential", "scale", "snowball", "long term", "long-term"],
+    "funnel":        ["funnel", "leads", "conversion", "drop off", "drop-off", "stages", "leak", "leaking"],
+    "donut_progress":["percent", "%", "rate", "share", "half", "portion", "majority"],
+    "arrow_up":      ["rise", "rising", "higher", "boost", "lift", "go up", "grow"],
+    "roi_coins":     ["cost", "price", "budget", "spend", "money", "cheap", "invoice", "roi", "rupee", "rs "],
+    "radar_sweep":   ["audit", "scan", "detect", "find", "hidden", "invisible", "discover", "reveal"],
+}
+
+import random as _random
+def _all_headlines(spec):
+    out = []; v = (spec or {}).get("video") or {}
+    for b in (v.get("scenes") or []):
+        for h in (b.get("headline") or []): out.append(str(h))
+    return out
+def auto_motif(spec, look=None, rng=None):
+    text = " ".join([str((spec or {}).get("topic", ""))] + _all_headlines(spec)).lower()
+    if rng is None: rng = _random.Random((look or {}).get("seed", 0))
+    hits = [(m, sum(1 for kw in ks if kw in text)) for m, ks in MOTIF_KEYWORDS.items()]
+    hits = [h for h in hits if h[1] > 0]
+    if hits:
+        best = max(h[1] for h in hits)
+        return rng.choice(sorted([m for m, c in hits if c == best]))
+    return rng.choice(["bar_grow", "line_trend", "arrow_up", "donut_progress", "growth_curve", "none"])
 
 TODAY = "clarity"
 

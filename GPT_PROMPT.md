@@ -37,14 +37,16 @@ Then do quick web research on **today's angle** — current 2026 stats, platform
 - **Video (~35s):** 6 beats narrated by a voice, with per‑video music + sound design and an **animated hero vector motif**. Beats: (1) hook, (2) setup, (3) the data/peak beat, (4) reframe, (5) Build/Growth fix, (6) CTA. The on‑screen text is the kinetic captions; the **narration** says the fuller sentences.
 
 ## Enums you may use
-- `theme`: `"dark"` (default) or `"light"`.
+- `theme`: **optional** — `"dark"` or `"light"`. **Omit it** and the app auto‑rotates (mostly dark, occasionally light); only set it if you need a specific one.
 - `video.music_mood`: `"driving"` (urgent/energetic), `"uplift"` (positive), `"tense"` (serious/ticking).
-- `video.motif_name` — the animated hero vector. **Available now (use only these):**
-  - `"speedometer"` — speed / performance / load‑time (needle sweeps to a redline, counts up).
-  - `"countring"` — a countdown clock / "X seconds" / time‑to‑decide (ring depletes 10→0).
-  - `"none"` — no hero motif (the video still has rich motion + transitions).
-  Pick the one that fits the topic, else `"none"`. (More motifs are being added; if unsure, use `"none"`.) Put the scene indices where the motif appears in `video.motif_scenes` (e.g. `[0,2]` — usually the hook + the data beat).
+- `video.motif_name` — the animated hero vector. **Best: set `"auto"`** (the app matches a motif to your topic). Or name one: `"speedometer"` (speed/load‑time), `"countring"` (countdown/seconds), `"bar_grow"` (revenue/results), `"line_trend"` (trend over time), `"growth_curve"` (compounding), `"funnel"` (leads/conversion/leaks), `"donut_progress"` (a percentage/share), `"arrow_up"` (rise/scale), `"roi_coins"` (cost/Rs/budget), `"radar_sweep"` (audit/scan/hidden), or `"none"`. Put the scene indices where it appears in `video.motif_scenes` (e.g. `[0,2]` — hook + data beat).
 - `narration[i].speed`: ~0.95 (deliberate/emphasis) to ~1.05 (urgent). Spell tricky acronyms phonetically for the voice (e.g. `"Apex I-T"`, `"D-M AUDIT"`).
+
+### Art direction (all optional — the app art‑directs each post for you)
+The app seeds a different premium look per day (background world, layout, motion, transitions, type, motif). **You normally don't set any of these** — just leave them out.
+- `look` (optional): `"auto"` (default) or one of `noir_editorial, blueprint, swiss_grid, spotlight, aurora_mesh, data_room, kinetic_bold, magazine, minimal_mono, duotone, signal_hud, graphite`.
+- `seed` (optional): an integer to pin a specific look/variation.
+- `accent` (optional): a hex to nudge the hero accent — keep it amber‑family; amber stays the hero either way.
 
 ---
 
@@ -70,7 +72,7 @@ Then do quick web research on **today's angle** — current 2026 stats, platform
   "video": {
     "kicker": "same/related System name",
     "music_mood": "driving",
-    "motif_name": "countring",
+    "motif_name": "auto",
     "motif_scenes": [0,2],
     "narration": [
       { "text": "Beat 1 spoken sentence.", "speed": 1.0 },

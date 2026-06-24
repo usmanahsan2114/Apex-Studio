@@ -3,6 +3,7 @@
   "date": "2026-06-23",
   "topic": "A cheap website is the most expensive one you'll ever buy (Rs framing)",
   "theme": "dark",
+  "look": "auto",
   "carousel": {
     "kicker": "Cost of Cheap",
     "slides": [

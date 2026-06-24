@@ -21,15 +21,19 @@ import imageio_ffmpeg
 import build_today_pack as pack
 import video_concepts as VC
 import apex_spec
+import apex_art
 
 def get_concept():
     sp = os.environ.get("APEX_SPEC")
-    if sp and os.path.exists(sp):
-        s = apex_spec.load(sp)
-        if s.get("video"):
-            print("APEX_SPEC video loaded:", s.get("id", "?"), flush=True)
-            return apex_spec.build_video_concept(s, VC.MOTIFS)
-    return VC.get_today()
+    spec = apex_spec.load(sp) if (sp and os.path.exists(sp)) else None
+    look = apex_art.choose_look(spec or {}, kind="video")
+    if spec and spec.get("video"):
+        print("APEX_SPEC video loaded:", spec.get("id", "?"), "| look:", look["lookbook"], look["theme"], flush=True)
+        c = apex_spec.build_video_concept(spec, VC.MOTIFS, look=look)
+    else:
+        c = dict(VC.get_today())
+    c["look"] = look
+    return c
 
 ROOT, OUT = pack.ROOT, pack.OUT
 VIDEO_DIR = os.path.join(OUT, "video")
@@ -144,14 +148,24 @@ def build_sfx(tl, path):
         sig=cache[name]; i=int(t*SR); j=min(n,i+len(sig)); buf[i:j]+=sig[:j-i]*kw.get("gain",1.0)
     buf=np.tanh(buf*0.9); write_wav(path, buf[:int(tl["total"]*SR)]); return path
 
-# ===================== TIMELINE (VO-driven) =====================
-def build_timeline(durs):
+# ===================== TIMELINE (VO-driven; bakes per-scene art-direction) =====================
+def build_timeline(durs, look=None):
     sc=[]; t=INTRO
+    mot=(look or {}).get("motion", {}) or {}
+    seq=mot.get("transition_seq", []); sj=mot.get("scene_jitter", [])
     for i,d in enumerate(durs):
         dur=LEADIN+d+TAIL
-        sc.append(dict(id=f"s{i+1}", start=round(t,3), end=round(t+dur,3), vo_at=round(t+LEADIN,3), punch=round(LEADIN+0.30,3)))
+        sc.append(dict(id=f"s{i+1}", start=round(t,3), end=round(t+dur,3),
+                       vo_at=round(t+LEADIN,3), punch=round(LEADIN+0.30,3),
+                       trans=(seq[i] if i < len(seq) else "fade_clip"),
+                       enter=(sj[i]["enter"] if i < len(sj) else 0.60),
+                       stag=(sj[i]["stagger"] if i < len(sj) else 0.10),
+                       dir=(sj[i]["dir"] if i < len(sj) else 1)))
         t+=dur
-    return dict(total=round(t+OUTRO,3), fps=FPS, scenes=sc)
+    tl=dict(total=round(t+OUTRO,3), fps=FPS, scenes=sc)
+    style=apex_art.build_style_block(look) if look else None
+    if style: tl["style"]=style
+    return tl
 
 # ===================== RENDER ENGINE =====================
 RENDER_JS = r"""
@@ -160,39 +174,83 @@ function lerp(a,b,u){return a+(b-a)*u;}
 var E={lin:function(u){return u;},outQuad:function(u){return 1-(1-u)*(1-u);},inQuad:function(u){return u*u;},
  outCubic:function(u){return 1-Math.pow(1-u,3);},inOutCubic:function(u){return u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;},
  inOutSine:function(u){return -(Math.cos(Math.PI*u)-1)/2;},
- outBack:function(u){var s=2.2;return 1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);}};
+ outBack:function(u){var s=2.2;return 1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);},
+ outExpo:function(u){return u>=1?1:1-Math.pow(2,-10*u);},inExpo:function(u){return u<=0?0:Math.pow(2,10*u-10);},
+ outElastic:function(u){if(u===0||u===1)return u;var c=(2*Math.PI)/3;return Math.pow(2,-10*u)*Math.sin((u*10-0.75)*c)+1;},
+ spring:function(u){return 1-Math.cos(u*Math.PI*1.6)*Math.exp(-u*4.2);}};
+E.byName=function(n){return E[n]||E.outCubic;};
 function q(s){return document.querySelector(s);}
 function setO(s,v){var e=q(s);if(e)e.style.opacity=v;}
+function ST(){return (window.TL&&TL.style)?TL.style:null;}
 function getT(){var p=new URLSearchParams(location.search);var t=parseFloat(p.get('t'));
  if(isNaN(t)){var f=parseInt(p.get('f')||'0');t=f/(parseInt(p.get('fps')||'30'));}return t;}
+function wrapWords(el){var kids=Array.prototype.slice.call(el.childNodes);el.innerHTML='';
+ kids.forEach(function(node){
+  if(node.nodeType===3){var parts=node.textContent.split(/(\s+)/);parts.forEach(function(p){
+    if(p.trim()===''){el.appendChild(document.createTextNode(p));}
+    else{var s=document.createElement('span');s.className='kw';s.textContent=p;el.appendChild(s);}});}
+  else if(node.nodeName==='BR'){el.appendChild(node);}
+  else{var s=document.createElement('span');s.className='kw';s.appendChild(node);el.appendChild(s);}});}
+function kineticSplit(){var S=ST();if(!S||!S.kinetic)return;var m=S.kinetic.mode;
+ if(m==='punch'||m==='none')return;var hh=document.querySelectorAll('.scene .hxl,.scene .hlg');
+ for(var z=0;z<hh.length;z++)wrapWords(hh[z]);}
+function applyTrans(el,kind,enter,exit,dir,ru,td){var op=(enter*(1-exit));
+ if(kind==='push_slide'){el.style.filter='none';el.style.clipPath='none';el.style.opacity=op.toFixed(4);el.style.transform='translateX('+(dir*(1-enter)*70 - dir*exit*70).toFixed(1)+'px)';return;}
+ if(kind==='scale_dissolve'){el.style.filter='none';el.style.clipPath='none';el.style.opacity=op.toFixed(4);el.style.transform='scale('+(lerp(0.88,1,enter)+exit*0.08).toFixed(3)+')';return;}
+ if(kind==='blur_dissolve'){el.style.clipPath='none';el.style.opacity=op.toFixed(4);el.style.filter='blur('+(((1-enter)+exit)*9).toFixed(2)+'px)';el.style.transform='scale('+lerp(1.04,1,enter).toFixed(3)+')';return;}
+ if(kind==='card_stack'){el.style.filter='none';el.style.clipPath='none';el.style.opacity=op.toFixed(4);el.style.transform='translateY('+((1-enter)*42 - exit*28).toFixed(1)+'px) rotate('+((1-enter)*-2.4 + exit*1.8).toFixed(2)+'deg) scale('+lerp(0.94,1,enter).toFixed(3)+')';return;}
+ if(kind==='whip_pan'){var sk=(1-enter)*12 + exit*12;el.style.filter='none';el.style.clipPath='none';el.style.opacity=op.toFixed(4);el.style.transform='translateX('+(dir*(1-enter)*130 - dir*exit*130).toFixed(1)+'px) skewX('+(dir*sk).toFixed(1)+'deg)';return;}
+ if(kind==='mask_wipe_h'){el.style.filter='none';el.style.transform='none';el.style.opacity=(op>0?1:0);el.style.clipPath='inset(0 '+(exit*100).toFixed(1)+'% 0 '+((1-enter)*100).toFixed(1)+'%)';return;}
+ if(kind==='mask_wipe_v'){el.style.filter='none';el.style.opacity=(op>0?1:0);el.style.transform='translateY('+((1-enter)*14).toFixed(1)+'px)';el.style.clipPath='inset('+((1-enter)*100).toFixed(1)+'% 0 '+(exit*100).toFixed(1)+'% 0)';return;}
+ if(kind==='mask_wipe_diag'){el.style.filter='none';el.style.transform='none';el.style.opacity=(op>0?1:0);var w=enter*150-25;el.style.clipPath='polygon(0 0,'+w.toFixed(0)+'% 0,'+(w-40).toFixed(0)+'% 100%,0 100%)';return;}
+ /* fade_clip = original */
+ el.style.filter='none';el.style.opacity=op.toFixed(4);
+ el.style.clipPath='inset('+(exit*100).toFixed(2)+'% 0 '+((1-enter)*100).toFixed(2)+'% 0)';
+ el.style.transform='translateY('+((1-E.outBack(c01(ru)))*26).toFixed(2)+'px)';}
 function render(t){
+ var S=ST();
+ var eEnter=S?E.byName(S.ease.enter):E.outCubic, eExit=S?E.byName(S.ease.exit):E.inQuad, ePunch=S?E.byName(S.ease.punch):E.outBack;
+ var camZ=S?S.cam.zoom:0.05, camP=S?S.cam.pan:10, PAR=S?S.parallax:0.45;
+ var WD=S?S.world:{rings_rot:1.1,particle_seed:1.7,blob_amp:18,beam_sweep:0.05,grid_drift:10,mesh_amp:8};
  var intro=E.outCubic(c01(t/0.55));
- setO('.kicker',intro); setO('.guides',intro); setO('.brwrap',intro);
+ setO('.kicker',intro);setO('.guides',intro);setO('.brwrap',intro);setO('.hud',intro);setO('.ticks',intro);setO('.idxnum',intro);setO('.rulewrap',intro);setO('.radar',intro);
  var sb=q('.splitbar'); if(sb)sb.style.transform='scaleX('+E.outBack(c01(t/0.6))+')';
  setO('.lockup',E.outCubic(c01((t-0.25)/0.55)));
  var pb=q('.pbar'); if(pb)pb.style.width=(c01(t/TL.total)*100)+'%';
  var aI=-1,aP=0,camS=1,panX=0;
  for(var i=0;i<TL.scenes.length;i++){var s=TL.scenes[i];var lo=t-s.start,ln=s.end-s.start;
-   if(lo>=-0.32&&lo<=ln+0.05){aI=i;aP=c01(lo/ln);camS=1+0.05*E.inOutSine(aP);panX=lerp(-10,10,E.inOutSine(aP));}}
+   if(lo>=-0.32&&lo<=ln+0.05){aI=i;aP=c01(lo/ln);camS=1+camZ*E.inOutSine(aP);panX=lerp(-camP,camP,E.inOutSine(aP));}}
  var st=q('.stage'); if(st)st.style.transform='translateX('+panX+'px) scale('+camS+')';
- var mesh=q('.mesh'); if(mesh)mesh.style.transform='translate('+(panX*-0.45+Math.sin(t*0.18)*8)+'px,'+(Math.cos(t*0.13)*6)+'px)';
+ var mesh=q('.mesh'); if(mesh)mesh.style.transform='translate('+(panX*-PAR+Math.sin(t*0.18)*WD.mesh_amp)+'px,'+(Math.cos(t*0.13)*(WD.mesh_amp*0.75))+'px)';
  var glow=q('.glow'); if(glow)glow.style.transform='scale('+(1+0.02*Math.sin(t*0.5))+')';
- var rings=q('.rings'); if(rings)rings.style.transform='translate(calc(-50% + '+(panX*-0.3)+'px),-50%) rotate('+(t*1.1)+'deg)';
- var ps=document.querySelectorAll('.particle');
- for(var k=0;k<ps.length;k++){var ph=k*1.7;ps[k].style.transform='translate('+(Math.sin(t*0.5+ph)*26)+'px,'+(Math.cos(t*0.37+ph)*30)+'px)';}
+ var rings=q('.rings'); if(rings)rings.style.transform='translate(calc(-50% + '+(panX*-PAR*0.7)+'px),-50%) rotate('+(t*WD.rings_rot)+'deg)';
+ var beam=q('.beam'); if(beam)beam.style.transform='translateX(-50%) rotate('+(18+Math.sin(t*(WD.beam_sweep||0.05)*6.28)*5)+'deg)';
+ var blobs=document.querySelectorAll('.blob');
+ for(var bi=0;bi<blobs.length;bi++){var bp=bi*2.1;blobs[bi].style.transform='translate(calc(-50% + '+(Math.sin(t*0.12+bp)*(WD.blob_amp||16))+'px),calc(-50% + '+(Math.cos(t*0.1+bp)*(WD.blob_amp||16))+'px))';}
+ var grid=q('.grid'); if(grid)grid.style.transform='translate('+(panX*-PAR*0.5)+'px,'+(((t*(WD.grid_drift||10))%80))+'px)';
+ var ps=document.querySelectorAll('.particle');var psd=WD.particle_seed||1.7;
+ for(var k=0;k<ps.length;k++){var ph=k*psd;ps[k].style.transform='translate('+(Math.sin(t*0.5+ph)*26)+'px,'+(Math.cos(t*0.37+ph)*30)+'px)';}
+ var km=S?S.kinetic:null;
  for(var i=0;i<TL.scenes.length;i++){
    var s=TL.scenes[i],el=document.getElementById(s.id);if(!el)continue;
    var lo=t-s.start,ln=s.end-s.start;
    if(lo< -0.32||lo> ln+0.05){el.style.display='none';continue;}
    el.style.display='flex';
-   var enter=E.outCubic(c01(lo/0.6)),exit=E.inQuad(c01((lo-(ln-0.45))/0.45));
-   el.style.opacity=(enter*(1-exit)).toFixed(4);
-   el.style.clipPath='inset('+(exit*100).toFixed(2)+'% 0 '+((1-enter)*100).toFixed(2)+'% 0)';
-   el.style.transform='translateY('+((1-E.outBack(c01(lo/0.6)))*26).toFixed(2)+'px)';
-   var sg=el.querySelectorAll('.stag');
-   for(var j=0;j<sg.length;j++){var d=0.16+j*0.10;var cu=E.outCubic(c01((lo-d)/0.5));sg[j].style.opacity=cu.toFixed(4);sg[j].style.transform='translateY('+((1-cu)*18).toFixed(2)+'px)';}
+   var ed=s.enter||0.6, td=(S?S.trans_dur:0.45), ru=c01(lo/ed);
+   var enter=eEnter(ru), exit=eExit(c01((lo-(ln-td))/td));
+   applyTrans(el, s.trans||'fade_clip', enter, exit, s.dir||1, ru, td);
+   if(km&&km.mode&&km.mode!=='punch'&&km.mode!=='none'){
+     var kws=el.querySelectorAll('.kw');
+     for(var w2=0;w2<kws.length;w2++){var dd=0.12+w2*km.unit_stagger;var cu=eEnter(c01((lo-dd)/0.5));
+       kws[w2].style.opacity=cu.toFixed(3);kws[w2].style.transform='translateY('+((1-cu)*km.unit_y).toFixed(2)+'px)';
+       if(km.mode==='word_blur')kws[w2].style.filter='blur('+((1-cu)*km.unit_blur).toFixed(2)+'px)';
+       else if(km.mode==='block_mask')kws[w2].style.clipPath='inset('+((1-cu)*100).toFixed(1)+'% 0 0 0)';}
+   } else {
+     var sg=el.querySelectorAll('.stag');
+     for(var j=0;j<sg.length;j++){var d=0.16+j*(s.stag||0.10);var cu=E.outCubic(c01((lo-d)/0.5));sg[j].style.opacity=cu.toFixed(4);sg[j].style.transform='translateY('+((1-cu)*18).toFixed(2)+'px)';}
+   }
    var pn=el.querySelectorAll('.punch');
-   for(var m=0;m<pn.length;m++){var at=parseFloat(pn[m].getAttribute('data-at')||'0.3');var raw=(lo-at)/0.55;var pu=raw<=0?0:E.outBack(c01(raw));var po=c01((lo-at)/0.16);var pre=(raw>-0.15&&raw<0)?(-0.04*(1-c01((raw+0.15)/0.15))):0;pn[m].style.transform='scale('+(lerp(0.55,1,pu)+pre).toFixed(3)+')';pn[m].style.opacity=po.toFixed(3);}
+   for(var m=0;m<pn.length;m++){var at=parseFloat(pn[m].getAttribute('data-at')||'0.3');var raw=(lo-at)/0.55;var pu=raw<=0?0:ePunch(c01(raw));var po=c01((lo-at)/0.16);var pre=(raw>-0.15&&raw<0)?(-0.04*(1-c01((raw+0.15)/0.15))):0;pn[m].style.transform='scale('+(lerp(0.55,1,pu)+pre).toFixed(3)+')';pn[m].style.opacity=po.toFixed(3);}
    var sw=el.querySelector('.sweep'),head=el.querySelector('.hxl,.hlg');
    if(head){if(!sw){sw=document.createElement('div');sw.className='sweep';head.appendChild(sw);}var swu=(lo-0.40)/0.5;if(swu>0&&swu<1){sw.style.opacity='1';sw.style.transform='translateX('+lerp(-140,240,swu)+'%) skewX(-18deg)';}else{sw.style.opacity='0';}}
    var dv=el.querySelector('.divider'); if(dv)dv.style.transform='scaleY('+E.outCubic(c01((lo-0.3)/0.6)).toFixed(3)+')';
@@ -202,28 +260,20 @@ function render(t){
 """
 
 def build_anim_html(aspect, concept, tl):
-    A=ASPECTS[aspect]; P=pack.PALETTES[THEME]; W,H=A["w"],A["h"]
+    A=ASPECTS[aspect]; W,H=A["w"],A["h"]
+    look=concept.get("look"); theme=(look["theme"] if look else THEME)
+    P=apex_art.palette_for(look, theme) if look else pack.PALETTES[THEME]
     scene_divs="\n".join(f'<div class="scene" id="s{i+1}">{html}</div>' for i,html in enumerate(concept["scenes"]))
-    particles="".join('<div class="particle"></div>' for _ in range(6))
     motif_svg=concept["motif_svg"](P)
     motif_js=concept.get("motif_js","")
+    layers_html=apex_art.world_html(look, theme, W, H, None) if look else ""
+    layers_css=apex_art.world_css(look, theme, W, H) if look else ""
+    type_over=apex_art.type_css(look) if look else ""
     style=f"""
 @page{{margin:0}} *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{width:{W}px;height:{H}px}}
 body{{font-family:'Segoe UI','Inter',Arial,sans-serif;background:{P['base']};color:{P['text_primary']};-webkit-font-smoothing:antialiased;overflow:hidden}}
 .canvas{{position:relative;width:{W}px;height:{H}px;background:{P['bg_grad']};overflow:hidden}}
-.grain{{position:absolute;inset:0;background:url('{pack.GRAIN}');opacity:{P['grain']};mix-blend-mode:overlay}}
-.dots{{position:absolute;inset:0;background-image:radial-gradient(circle,{P['dot']} 1.2px,transparent 1.4px);background-size:34px 34px}}
-.glow{{position:absolute;inset:0;background:{P['glow']}}}
-.mesh{{position:absolute;inset:0;background:{P['mesh']};opacity:{pack.bgop(1.0)}}}
-.vignette{{position:absolute;inset:0;background:{P['vignette']}}}
-.rings{{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%)}}
-.guides{{position:absolute;inset:0}}
-.brwrap{{position:absolute;inset:0}}
-.br{{position:absolute;width:34px;height:34px;border:1.5px solid {P['bracket']}}}
-.br.tl{{top:54px;left:54px;border-right:0;border-bottom:0}} .br.tr{{top:54px;right:54px;border-left:0;border-bottom:0}}
-.br.bl{{bottom:54px;left:54px;border-right:0;border-top:0}} .br.rb{{bottom:54px;right:54px;border-left:0;border-top:0}}
-.particle{{position:absolute;left:50%;top:42%;width:7px;height:7px;border-radius:50%;background:{P['amber']};opacity:.16;filter:blur(.5px)}}
 .motif{{position:absolute;left:50%;top:{A['motif_top']}px;transform:translateX(-50%);z-index:3;opacity:0;will-change:transform,opacity}}
 .head{{position:absolute;top:{A['safe_top']+44}px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:13px;z-index:4}}
 .kicker{{font-size:16px;font-weight:700;letter-spacing:5px;color:{P['text_tertiary']};text-transform:uppercase}}
@@ -231,8 +281,9 @@ body{{font-family:'Segoe UI','Inter',Arial,sans-serif;background:{P['base']};col
 .splitbar .n{{flex:1;background:{P['neutral']}}} .splitbar .a{{flex:1;background:{P['amber']};box-shadow:{P['lane_glow']}}}
 .stage{{position:absolute;left:64px;right:64px;top:{H*0.31:.0f}px;height:{H*0.42:.0f}px;z-index:3;transform-origin:50% 45%}}
 .scene{{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;will-change:transform,opacity,clip-path}}
-.hxl{{position:relative;font-size:{A['title']}px;font-weight:800;line-height:1.02;letter-spacing:-2px;color:{P['text_primary']};overflow:hidden}}
-.hlg{{position:relative;font-size:{A['lg']}px;font-weight:800;line-height:1.06;letter-spacing:-1.2px;color:{P['text_primary']};overflow:hidden}}
+.hxl{{position:relative;font-size:{A['title']}px;font-weight:800;line-height:1.02;letter-spacing:-2px;color:{P['text_primary']};overflow:visible}}
+.hlg{{position:relative;font-size:{A['lg']}px;font-weight:800;line-height:1.06;letter-spacing:-1.2px;color:{P['text_primary']};overflow:visible}}
+.kw{{display:inline-block;will-change:transform,opacity}}
 .punch{{display:inline-block;transform-origin:center bottom;color:{P['amber']}}}
 .sweep{{position:absolute;top:0;bottom:0;left:0;width:42%;opacity:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.30),transparent);pointer-events:none}}
 .sub{{margin-top:24px;font-size:{A['sub']}px;font-weight:400;line-height:1.45;color:{P['text_secondary']};max-width:840px}}
@@ -254,13 +305,12 @@ body{{font-family:'Segoe UI','Inter',Arial,sans-serif;background:{P['base']};col
 .bname{{font-size:19px;font-weight:800;letter-spacing:1.5px;color:{P['text_primary']};text-transform:uppercase}}
 .xsep{{font-size:17px;color:{P['text_tertiary']};font-weight:600}}
 .pwrap{{width:240px;height:3px;background:{P['meter_track']};border-radius:3px;overflow:hidden}} .pbar{{height:100%;width:0%;background:{P['qbar']}}}
+{layers_css}
+{type_over}
 """
     body=f"""
 <div class="canvas">
-  <div class="grain"></div><div class="dots"></div><div class="glow"></div><div class="mesh"></div>
-  {pack.rings_svg(P)}<div class="vignette"></div><div class="guides">{pack.guides(P)}</div>
-  <div class="brwrap"><div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br rb"></div></div>
-  {particles}
+  {layers_html}
   <div class="motif" id="motif">{motif_svg}</div>
   <div class="head"><div class="kicker">{concept['kicker']}</div><div class="splitbar"><span class="n"></span><span class="a"></span></div></div>
   <div class="stage">{scene_divs}</div>
@@ -271,18 +321,23 @@ body{{font-family:'Segoe UI','Inter',Arial,sans-serif;background:{P['base']};col
       <div class="bm"><span class="bname">Apex Marketings</span><img src="{P['logo_m']}" height="36" alt=""></div>
     </div></div>
 </div>
-<script>var TL={json.dumps(tl)};{RENDER_JS}{motif_js}render(getT());</script>
+<script>var TL={json.dumps(tl)};var MS={json.dumps(concept.get("motif_scenes",[]))};{RENDER_JS}{motif_js}kineticSplit();render(getT());</script>
 """
     return pack.inject(f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style></head><body>{body}</body></html>")
 
 # ===================== CAPTURE / ENCODE =====================
-def _shot(html_path, aspect, t, out_png):
-    A=ASPECTS[aspect]; P=pack.PALETTES[THEME]; raw=out_png+".raw.png"
+def _theme_base(concept):
+    look=concept.get("look"); theme=look["theme"] if look else THEME
+    return apex_art.palette_for(look, theme)["base"] if look else pack.PALETTES[THEME]["base"]
+
+def _shot(html_path, aspect, t, out_png, base=None):
+    A=ASPECTS[aspect]; raw=out_png+".raw.png"
+    if base is None: base=pack.PALETTES[THEME]["base"]
     url="file:///"+html_path.replace("\\","/")+f"?t={t:.5f}"
     subprocess.run([CHROME,"--headless","--disable-gpu","--hide-scrollbars","--force-device-scale-factor=2",
         "--default-background-color=00000000",f"--window-size={A['w']},{A['h']}",f"--screenshot={raw}",url],
         check=True, capture_output=True)
-    img=Image.open(raw).convert("RGBA"); bg=Image.new("RGBA",img.size,pack.hex_rgb(P["base"])+(255,))
+    img=Image.open(raw).convert("RGBA"); bg=Image.new("RGBA",img.size,pack.hex_rgb(base)+(255,))
     img=Image.alpha_composite(bg,img).convert("RGB")
     if img.size!=(A["w"],A["h"]): img=img.resize((A["w"],A["h"]),Image.LANCZOS)
     img.save(out_png,"PNG"); os.remove(raw)
@@ -291,9 +346,9 @@ def capture_frames(aspect, concept, tl, fdir):
     os.makedirs(fdir, exist_ok=True)
     html=os.path.join(TMP,f"anim_{aspect}.html")
     with open(html,"w",encoding="utf-8") as f: f.write(build_anim_html(aspect, concept, tl))
-    n=int(round(tl["total"]*FPS))
+    base=_theme_base(concept); n=int(round(tl["total"]*FPS))
     for f in range(n):
-        _shot(html, aspect, f/FPS, os.path.join(fdir,f"frame_{f:05d}.png"))
+        _shot(html, aspect, f/FPS, os.path.join(fdir,f"frame_{f:05d}.png"), base)
         if f%30==0 or f==n-1: print(f"  [{aspect}] {f+1}/{n}", flush=True)
     return n
 
@@ -310,7 +365,7 @@ def probe(mp4): return subprocess.run([FF,"-i",mp4], capture_output=True, text=T
 def build_audio(concept):
     clips=[synth_line(text, sp) for (text, sp) in concept["narration"]]
     durs=[len(c)/SR for c in clips]
-    tl=build_timeline(durs)
+    tl=build_timeline(durs, concept.get("look"))
     # VO track
     n=int(tl["total"]*SR)+SR; vo=np.zeros(n,np.float32)
     for s,clip in zip(tl["scenes"],clips):
@@ -334,13 +389,14 @@ def build_audio(concept):
 # ===================== MAIN =====================
 def smoke():
     os.makedirs(TMP, exist_ok=True); concept=get_concept()
-    tl, audio=build_audio(concept)
-    print("concept=%s total=%.2fs"%(concept["id"],tl["total"]), [(s["id"],s["start"],round(s["end"],1)) for s in tl["scenes"]], flush=True)
+    tl, audio=build_audio(concept); base=_theme_base(concept)
+    lk=concept.get("look", {})
+    print("concept=%s look=%s/%s total=%.2fs"%(concept["id"], lk.get("lookbook","-"), lk.get("theme","-"), tl["total"]), flush=True)
     shutil.copy(audio, os.path.join(ROOT,"_audio_preview.wav"))
     html=os.path.join(TMP,"anim_smoke.html")
     with open(html,"w",encoding="utf-8") as f: f.write(build_anim_html("instagram", concept, tl))
     for s in tl["scenes"]:
-        t=(s["start"]+s["end"])/2; _shot(html,"instagram",t,os.path.join(ROOT,f"_smoke_{s['id']}.png")); print("smoke",s["id"],round(t,2),flush=True)
+        t=(s["start"]+s["end"])/2; _shot(html,"instagram",t,os.path.join(ROOT,f"_smoke_{s['id']}.png"), base); print("smoke",s["id"],round(t,2),flush=True)
 
 def main():
     os.makedirs(VIDEO_DIR, exist_ok=True); concept=get_concept()

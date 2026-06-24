@@ -68,7 +68,9 @@ def _meter(mt):
             % (mt["head"], mt.get("left", ""), mt.get("right", "")))
 def _cta(s): return bold_static((s or "").replace('"AUDIT"', '<b>&ldquo;AUDIT&rdquo;</b>'))
 
-def build_carousel_slides(c):
+def build_carousel_slides(c, look=None):
+    # `look` (from apex_art) art-directs world/layout/type at the doc() level; the 5-slide
+    # semantic structure here stays identical so content + brand lockup are unchanged.
     s = c["slides"]; g = lambda i, k, d=None: s[i].get(k, d)
     s1 = ('%s<h1 class="hxl">%s</h1>\n     <p class="sub">%s</p>\n     <div class="swipe">Swipe &rarr;</div>'
           % (_motif_stamp(g(0, "motif")), _lines(g(0, "headline", []), bold_static), bold_static(g(0, "sub", ""))))
@@ -121,13 +123,17 @@ def build_video_scenes(beats):
         out.append("\n     ".join(p))
     return out
 
-def build_video_concept(spec, MOTIFS):
-    v = spec["video"]; fn, js = MOTIFS.get(v.get("motif_name", "none"), MOTIFS.get("none"))
+def build_video_concept(spec, MOTIFS, look=None):
+    v = spec["video"]; name = v.get("motif_name", "auto")
+    if name in ("auto", None) or name not in MOTIFS:      # resolve auto/unknown -> keyword pick
+        import video_concepts as _VC
+        name = _VC.auto_motif(spec, look)
+    fn, js = MOTIFS.get(name, MOTIFS.get("none"))
     return dict(id=spec.get("id", "day"), kicker=v["kicker"], music_mood=v.get("music_mood", "driving"),
                 caption=v.get("caption", ""),
                 narration=[(n["text"], float(n.get("speed", 1.0))) for n in v["narration"]],
                 scenes=build_video_scenes(v["scenes"]),
-                motif_scenes=v.get("motif_scenes", []), motif_svg=fn, motif_js=js)
+                motif_scenes=v.get("motif_scenes", []), motif_svg=fn, motif_js=js, motif_name=name)
 
 # ---------------- load / validate ----------------
 def load(path):
@@ -160,7 +166,20 @@ def validate(spec):
         if len(v.get("scenes", [])) != 6: e.append("video.scenes must have 6 beats")
         if v.get("music_mood", "driving") not in ("driving", "uplift", "tense"):
             e.append("video.music_mood must be driving|uplift|tense")
+    # optional art-direction fields — all optional, lenient (never block on these)
+    if "seed" in spec:
+        try: int(spec["seed"])
+        except Exception: e.append("seed must be an integer")
+    _look = spec.get("look") or spec.get("style")
+    if _look and _look != "auto":
+        try:
+            import apex_art
+            if _look not in apex_art.LOOKBOOKS:
+                e.append("look must be 'auto' or one of: " + ", ".join(sorted(apex_art.LOOKBOOKS)))
+        except Exception:
+            pass
     return (len(e) == 0), e
 
-VALID_MOTIFS = ["speedometer", "house_key", "hourglass", "funnel", "none"]
+VALID_MOTIFS = ["auto", "speedometer", "countring", "bar_grow", "line_trend", "growth_curve",
+                "funnel", "donut_progress", "arrow_up", "roi_coins", "radar_sweep", "none"]
 MUSIC_MOODS = ["driving", "uplift", "tense"]

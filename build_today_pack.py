@@ -132,26 +132,19 @@ def dots_ind(P, idx, total):
         s += f'<span class="pd{" on" if i == idx else ""}"></span>'
     return s + '</div>'
 
-def doc(theme, idx, total, inner):
-    P = PALETTES[theme]
+def doc(look, theme, idx, total, inner):
+    import apex_art
+    if look is None: look = apex_art.choose_look({}, kind="carousel")
+    P = apex_art.palette_for(look, theme)
+    layers_css = apex_art.world_css(look, theme, W, H)      # background world + accents (per look)
+    layers_html = apex_art.world_html(look, theme, W, H, idx)
+    type_over = apex_art.type_css(look)                     # headline weight/tracking/scale + align
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page {{ margin:0; }} * {{ box-sizing:border-box; margin:0; padding:0; }}
 html,body {{ width:{W}px; height:{H}px; }}
 body {{ font-family:'Segoe UI','Inter',Arial,sans-serif; background:{P['base']}; color:{P['text_primary']}; -webkit-font-smoothing:antialiased; overflow:hidden; }}
 .canvas {{ position:relative; width:{W}px; height:{H}px; background:{P['bg_grad']}; padding:70px 78px 62px; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; overflow:hidden; }}
-.grain {{ position:absolute; inset:0; background:url('{GRAIN}'); opacity:{P['grain']}; mix-blend-mode:overlay; pointer-events:none; }}
-.dots {{ position:absolute; inset:0; background-image:radial-gradient(circle, {P['dot']} 1.2px, transparent 1.4px); background-size:32px 32px; pointer-events:none; }}
-.glow {{ position:absolute; inset:0; background:{P['glow']}; pointer-events:none; }}
-.rings {{ position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); pointer-events:none; }}
-.br {{ position:absolute; width:32px; height:32px; border:1.5px solid {P['bracket']}; z-index:2; }}
-.br.tl {{ top:46px; left:46px; border-right:0; border-bottom:0; }}
-.br.tr {{ top:46px; right:46px; border-left:0; border-bottom:0; }}
-.br.bl {{ bottom:46px; left:46px; border-right:0; border-top:0; }}
-.br.rb {{ bottom:46px; right:46px; border-left:0; border-top:0; }}
-.mesh {{ position:absolute; inset:0; background:{P['mesh']}; opacity:{bgop(1.0)}; pointer-events:none; }}
-.vignette {{ position:absolute; inset:0; background:{P['vignette']}; opacity:{bgop(1.0)}; z-index:1; pointer-events:none; }}
-.ghost {{ position:absolute; inset:0; opacity:{bgop(1.0)}; z-index:0; pointer-events:none; overflow:hidden; }}
-.guides {{ position:absolute; inset:0; opacity:{bgop(1.0)}; z-index:2; pointer-events:none; }}
+{layers_css}
 
 .head {{ position:relative; z-index:3; display:flex; flex-direction:column; align-items:center; gap:14px; }}
 .kicker {{ font-size:15px; font-weight:700; letter-spacing:4px; color:{P['text_tertiary']}; text-transform:uppercase; }}
@@ -203,20 +196,12 @@ body {{ font-family:'Segoe UI','Inter',Arial,sans-serif; background:{P['base']};
 .bm img {{ display:block; }}
 .bname {{ font-size:17px; font-weight:800; letter-spacing:1.3px; color:{P['text_primary']}; text-transform:uppercase; }}
 .xsep {{ font-size:15px; color:{P['text_tertiary']}; font-weight:600; padding:0 4px; }}
+{type_over}
 </style></head><body>
 <div class="canvas">
-  <div class="grain"></div><div class="dots"></div><div class="glow"></div>
-  {rings_svg(P)}
-  <div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br rb"></div>
-  <div class="mesh"></div>
-  <div class="vignette"></div>
-  {ghost_glyph(P, idx)}
-  {guides(P)}
-
+  {layers_html}
   <div class="head"><div class="kicker">{KICKER}</div><div class="splitbar"><span class="n"></span><span class="a"></span></div></div>
-
   <div class="body">{inner}</div>
-
   <div class="foot">
     {dots_ind(P, idx, total)}
     <div class="lockup">
@@ -258,8 +243,8 @@ SLIDES = [
      <div class="ctabox">DM <b>&ldquo;AUDIT&rdquo;</b> and we'll show you what you own vs what you rent, free.</div>""",
 ]
 
-def render_slide(theme, idx, total, inner):
-    html = inject(doc(theme, idx, total, inner))
+def render_slide(look, theme, idx, total, inner):
+    html = inject(doc(look, theme, idx, total, inner))
     tmp = os.path.join(tempfile.gettempdir(), f"apex_{theme}_{idx}.html")
     with open(tmp, "w", encoding="utf-8") as f: f.write(html)
     raw = os.path.join(tempfile.gettempdir(), f"apex_raw_{theme}_{idx}.png")
@@ -268,7 +253,9 @@ def render_slide(theme, idx, total, inner):
         "--window-size=%d,%d" % (W, H), "--screenshot=%s" % raw,
         "file:///" + tmp.replace("\\", "/")], check=True, capture_output=True)
     img = Image.open(raw).convert("RGBA")
-    bg = Image.new("RGBA", img.size, hex_rgb(PALETTES[theme]["base"]) + (255,))
+    import apex_art
+    _base = apex_art.palette_for(look, theme)["base"] if look else PALETTES[theme]["base"]
+    bg = Image.new("RGBA", img.size, hex_rgb(_base) + (255,))
     img = Image.alpha_composite(bg, img).convert("RGB")
     if img.size != (W, H): img = img.resize((W, H), Image.LANCZOS)
     os.remove(raw)
@@ -309,20 +296,25 @@ def cleanup_output():
         elif os.path.isfile(p) and f not in KEEP_FILES: os.remove(p)
 
 # --- optional: load the day's content from a day_spec.json (env APEX_SPEC) ---
+import apex_art
+LOOK = None
 _spec_path = os.environ.get("APEX_SPEC")
 if _spec_path and os.path.exists(_spec_path):
     import apex_spec
     _spec = apex_spec.load(_spec_path)
+    LOOK = apex_art.choose_look(_spec, kind="carousel")
     if _spec.get("carousel"):
         _c = _spec["carousel"]
         KICKER = _c["kicker"]
-        SLIDES = apex_spec.build_carousel_slides(_c)
+        SLIDES = apex_spec.build_carousel_slides(_c, look=LOOK)
         LINKEDIN_CAPTION, FB_CAPTION = apex_spec.carousel_captions(_c)
-        print("APEX_SPEC carousel loaded:", _spec.get("id", "?"))
+        print("APEX_SPEC carousel loaded:", _spec.get("id", "?"), "| look:", LOOK["lookbook"], LOOK["theme"])
 
 if __name__ == "__main__":
+    if LOOK is None: LOOK = apex_art.choose_look({}, kind="carousel")
+    print("art-direction:", LOOK["lookbook"], "| seed", LOOK["seed"], flush=True)
     for theme in ("dark", "light"):
-        imgs = [render_slide(theme, i + 1, len(SLIDES), inner) for i, inner in enumerate(SLIDES)]
+        imgs = [render_slide(LOOK, theme, i + 1, len(SLIDES), inner) for i, inner in enumerate(SLIDES)]
         for plat in ("linkedin", "fb"):
             d = os.path.join(OUT, f"{plat}-{theme}")
             os.makedirs(d, exist_ok=True)
@@ -334,4 +326,5 @@ if __name__ == "__main__":
     open(os.path.join(OUT, "linkedin.md"), "w", encoding="utf-8").write(LINKEDIN_CAPTION)
     open(os.path.join(OUT, "fb.md"), "w", encoding="utf-8").write(FB_CAPTION)
     cleanup_output()
+    apex_art.remember_look(LOOK)
     print("DONE. generated_images now holds:", sorted(os.listdir(OUT)))

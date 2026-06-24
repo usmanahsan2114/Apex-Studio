@@ -7,8 +7,9 @@ generated_images/
 # ── Legacy / archived files (kept locally, not part of the app) ──
 extra/
 
-# ── Runtime working file (last generated spec; see day_spec.example.json) ──
+# ── Runtime working files ──
 day_spec.json
+art_memory.json
 
 # ── Python ──
 __pycache__/
