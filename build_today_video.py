@@ -63,8 +63,11 @@ TMP = os.path.join(tempfile.gettempdir(), "apex_vid")
 KDIR = os.path.join(ROOT, "assets", "kokoro")
 FF = imageio_ffmpeg.get_ffmpeg_exe()
 CHROME = pack.CHROME
-FPS, SR, THEME = 30, 48000, "dark"
+FPS = int(os.environ.get("APEX_FPS", "30"))   # 30 default (+motion blur = cinematic); APEX_FPS=60 for max-smooth
+SR, THEME = 48000, "dark"
 VOICE = "af_heart"                      # warm, natural, engaging (kokoro v1.0)
+VOICES = ["af_heart", "af_bella", "af_nicole", "am_michael", "bm_george", "am_onyx"]  # seeded variety
+_CUR_VOICE = VOICE                      # set per-concept in build_audio
 LEADIN, TAIL, INTRO, OUTRO = 0.40, 0.62, 0.6, 1.1
 
 ASPECTS = {
@@ -82,7 +85,10 @@ def _kokoro():
     return _KOKORO
 
 def synth_line(text, speed):
-    s, sr = _kokoro().create(text, voice=VOICE, speed=speed, lang="en-us")
+    try:
+        s, sr = _kokoro().create(text, voice=_CUR_VOICE, speed=speed, lang="en-us")
+    except Exception:   # any seeded voice not present -> safe fallback to the default
+        s, sr = _kokoro().create(text, voice=VOICE, speed=speed, lang="en-us")
     s = np.asarray(s, np.float32)
     if sr != SR:
         s = resample_poly(s, SR, sr).astype(np.float32)
@@ -126,6 +132,45 @@ def make_music(mood, seconds):
     f = int(0.8*SR); out[:f] *= np.linspace(0,1,f); out[-f:] *= np.linspace(1,0,f)
     return out.astype(np.float32)
 
+# ---- real audio assets (CC0 music beds + SFX) with procedural fallback ----
+MUSIC_DIR = os.path.join(ROOT, "assets", "music")   # assets/music/{driving,uplift,tense}/*.mp3|wav
+SFX_DIR = os.path.join(ROOT, "assets", "sfx")        # assets/sfx/{whoosh,riser,tick,chime,thud,impact}*.wav|mp3
+def _load_audio(path):
+    """Decode any audio file (mp3/wav/...) to mono float32 @ SR via ffmpeg. None on failure."""
+    try:
+        r = subprocess.run([FF, "-v", "error", "-i", path, "-ac", "1", "-ar", str(SR), "-f", "f32le", "-"],
+                           capture_output=True)
+        if r.returncode != 0 or not r.stdout:
+            return None
+        a = np.frombuffer(r.stdout, dtype=np.float32).copy()
+        return (a/(np.max(np.abs(a))+1e-9)).astype(np.float32)
+    except Exception:
+        return None
+def _loop_match(sig, seconds):
+    n = int(seconds*SR)
+    if len(sig) >= n: return sig[:n].astype(np.float32)
+    return np.tile(sig, n//len(sig)+1)[:n].astype(np.float32)
+def get_music_bed(mood, seconds, seed=0):
+    """Seeded pick from assets/music/<mood>/ (looped/trimmed to length); procedural fallback."""
+    import glob
+    files = sorted(glob.glob(os.path.join(MUSIC_DIR, mood, "*.mp3")) + glob.glob(os.path.join(MUSIC_DIR, mood, "*.wav")))
+    if files:
+        sig = _load_audio(files[int(seed) % len(files)])
+        if sig is not None and len(sig) > SR:
+            sig = _loop_match(sig, seconds)
+            f = int(0.8*SR); sig[:f] *= np.linspace(0,1,f); sig[-f:] *= np.linspace(1,0,f)
+            return sig.astype(np.float32)
+    return make_music(mood, seconds)
+def _real_sfx(name):
+    import glob
+    for ext in ("wav", "mp3"):
+        fs = sorted(glob.glob(os.path.join(SFX_DIR, name + "*." + ext)))
+        if fs:
+            sig = _load_audio(fs[0])
+            if sig is not None and len(sig) > 100:
+                return (sig*0.7).astype(np.float32)
+    return None
+
 # ===================== SFX (numpy) =====================
 def _band(x, lo, hi):
     b, a = butter(2, [lo/(SR/2), hi/(SR/2)], "band"); return lfilter(b, a, x).astype(np.float32)
@@ -166,7 +211,8 @@ def write_wav(path, mono):
 def build_sfx(tl, path):
     n=int((tl["total"]+1)*SR); buf=np.zeros(n,np.float32); cache={}
     for t,name,kw in cues(tl):
-        if name not in cache: cache[name]=SFX[name]()
+        if name not in cache:
+            r=_real_sfx(name); cache[name]=r if r is not None else SFX[name]()   # real file else procedural
         sig=cache[name]; i=int(t*SR); j=min(n,i+len(sig)); buf[i:j]+=sig[:j-i]*kw.get("gain",1.0)
     buf=np.tanh(buf*0.9); write_wav(path, buf[:int(tl["total"]*SR)]); return path
 
@@ -502,6 +548,9 @@ def probe(mp4): return subprocess.run([FF,"-i",mp4], capture_output=True, text=T
 
 # ===================== AUDIO BUILD (VO + music + SFX, ducked) =====================
 def build_audio(concept):
+    global _CUR_VOICE
+    _seed=int((concept.get("look") or {}).get("seed", 0) or 0)
+    _CUR_VOICE=VOICES[_seed % len(VOICES)]   # seeded voice variety (safe fallback in synth_line)
     clips=[synth_line(text, sp) for (text, sp) in concept["narration"]]
     durs=[len(c)/SR for c in clips]
     tl=build_timeline(durs, concept.get("look"))
@@ -514,7 +563,7 @@ def build_audio(concept):
     af="highpass=f=85,lowpass=f=13500,acompressor=threshold=-18dB:ratio=3:attack=8:release=120:makeup=2,treble=g=2:f=8000,aecho=0.8:0.85:14:0.04"
     subprocess.run([FF,"-y","-i",os.path.join(TMP,"vo_raw.wav"),"-af",af,"-ar",str(SR),os.path.join(TMP,"vo.wav")],check=True,capture_output=True)
     # music + sfx
-    write_wav(os.path.join(TMP,"music.wav"), make_music(concept["music_mood"], tl["total"]))
+    write_wav(os.path.join(TMP,"music.wav"), get_music_bed(concept["music_mood"], tl["total"], _seed))
     build_sfx(tl, os.path.join(TMP,"sfx.wav"))
     # mix: duck music + sfx under VO -> loudnorm -14
     # music sits well UNDER the voiceover: lower bed level + stronger sidechain duck under VO.

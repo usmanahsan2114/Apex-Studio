@@ -14,6 +14,7 @@ It REUSES build_today_video's own HTML/audio/encode so output is identical:
 """
 import base64, hashlib, json, os, shutil, socket, subprocess, sys, time, urllib.request, tempfile
 from io import BytesIO
+import numpy as np
 import websocket
 from PIL import Image
 import build_today_video as V
@@ -39,9 +40,15 @@ WEBGL_FLAGS = [
     "--disable-background-networking", "--disable-component-update", "--no-pings",
 ]
 LUSH = bool(os.environ.get("APEX_LUSH"))
-# Capture device scale. 2 = supersampled (crisp, 4x pixels). Lush/WebGL software render is heavy,
-# so default lush to 1 (native res = faster AND the WebGL canvas is 1:1 crisp).
-SCALE = int(os.environ.get("APEX_SCALE", "1" if LUSH else "2"))
+# ---- cinema-grade fidelity knobs (env-tunable; Max defaults). Render time scales ~ SCALE^2 * BLUR * (FPS/30).
+# SCALE 2 = supersampled (4x pixels -> crisp type); BLUR = motion-blur sub-samples averaged per frame.
+# Dial down for quick drafts: APEX_SCALE=1 APEX_BLUR=1 ; push hero posts: APEX_SCALE=3 APEX_BLUR=4 APEX_FPS=60.
+SCALE = max(1, int(os.environ.get("APEX_SCALE", "1" if LUSH else "2")))  # 1 = native 1:1 (crisp + fast); env 2/3 = supersample hero (much slower on software render)
+BLUR = max(1, int(os.environ.get("APEX_BLUR", "3")))      # sub-frames averaged -> cinematic motion blur (the affordable Max win; 1 = off)
+CRF = os.environ.get("APEX_CRF", "16")                    # H.264 quality (lower=better)
+PRESET = os.environ.get("APEX_PRESET", "veryslow")        # final encode effort (one pass/aspect)
+CAPQ = int(os.environ.get("APEX_CAPQ", "95"))             # JPEG capture quality (near-lossless, ~2x faster than PNG)
+FRAME_EXT = "jpg"
 
 def _build_html(aspect, concept, tl):
     """Lush v4 (WebGL/three.js) when APEX_LUSH, else the standard build_today_video page."""
@@ -112,11 +119,12 @@ class Chrome:
         except Exception: pass
 
 def encode_jpg(aspect, fdir, audio):
-    """Same as build_today_video.encode but reads frame_%05d.jpg intermediates."""
+    """Encode the PNG frame intermediates + audio to the final H.264 MP4 (lossless input,
+    CRF/preset env-tunable). Frames are already at output size (downsampled in render_aspect)."""
     A = V.ASPECTS[aspect]; out = os.path.join(V.VIDEO_DIR, A["out"])
-    subprocess.run([V.FF, "-y", "-framerate", str(V.FPS), "-i", os.path.join(fdir, "frame_%05d.jpg"),
+    subprocess.run([V.FF, "-y", "-framerate", str(V.FPS), "-i", os.path.join(fdir, f"frame_%05d.{FRAME_EXT}"),
         "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-crf", "18", "-preset", "slow", "-vf", f"scale={A['w']}:{A['h']}:flags=lanczos,format=yuv420p",
+        "-crf", str(CRF), "-preset", PRESET, "-vf", f"scale={A['w']}:{A['h']}:flags=lanczos,format=yuv420p",
         "-r", str(V.FPS), "-c:a", "aac", "-b:a", "192k", "-ar", str(V.SR),
         "-movflags", "+faststart", "-shortest", out], check=True, capture_output=True)
     return out
@@ -133,18 +141,27 @@ def render_aspect(ch, aspect, concept, tl, fdir):
     ch.wait_load()
     n = int(round(tl["total"] * V.FPS))
     t0 = time.time()
-    for f in range(n):
-        t = f / V.FPS
+
+    def grab(t):  # render(t) -> downsampled RGB frame (supersample crisping happens here)
         ch.cmd("Runtime.evaluate", {"expression": f"render({t});", "returnByValue": True})
-        # JPEG capture: the page bg is opaque, so no alpha-composite needed; intermediate
-        # frames are re-encoded to H.264 anyway, so q95 @ 2x supersample is visually lossless.
-        shot = ch.cmd("Page.captureScreenshot", {"format": "jpeg", "quality": 92, "captureBeyondViewport": False})
-        img = Image.open(BytesIO(base64.b64decode(shot["data"]))).convert("RGB")
-        if img.size != (W, H): img = img.resize((W, H), Image.LANCZOS)
-        img.save(os.path.join(fdir, f"frame_{f:05d}.jpg"), "JPEG", quality=95)
-        if f % 60 == 0 or f == n - 1:
+        shot = ch.cmd("Page.captureScreenshot", {"format": "jpeg", "quality": CAPQ, "captureBeyondViewport": False})
+        im = Image.open(BytesIO(base64.b64decode(shot["data"]))).convert("RGB")
+        if im.size != (W, H): im = im.resize((W, H), Image.LANCZOS)
+        return im
+
+    for f in range(n):
+        if BLUR <= 1:
+            img = grab(f / V.FPS)
+        else:  # motion blur: average BLUR deterministic sub-samples across the frame interval
+            acc = None
+            for s in range(BLUR):
+                a = np.asarray(grab((f + s / BLUR) / V.FPS), dtype=np.float32)
+                acc = a if acc is None else acc + a
+            img = Image.fromarray(np.clip(acc / BLUR + 0.5, 0, 255).astype(np.uint8))
+        img.save(os.path.join(fdir, f"frame_{f:05d}.{FRAME_EXT}"), quality=95)
+        if f % 30 == 0 or f == n - 1:
             el = time.time() - t0; r = (f + 1) / max(el, 1e-6)
-            print(f"  [{aspect}] {f+1}/{n}  {r:.1f} fps  eta {((n-f-1)/max(r,1e-6)):.0f}s", flush=True)
+            print(f"  [{aspect}] {f+1}/{n}  {r:.2f} fps  eta {((n-f-1)/max(r,1e-6)):.0f}s", flush=True)
     return n
 
 def test():

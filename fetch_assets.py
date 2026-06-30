@@ -166,9 +166,37 @@ def verify():
     print("VERIFY OK" if problems == 0 else f"VERIFY FAILED: {problems} problem(s)")
     return 0 if problems == 0 else 1
 
+AUDIO_MOODS = ["driving", "uplift", "tense"]
+AUDIO_README = (
+    "Apex Studio — real audio (optional). Drop CC0 / royalty-free (commercial-OK) files here;\n"
+    "the renderer auto-picks them (seeded per post) and falls back to the built-in procedural\n"
+    "engine when a folder is empty. So this is purely an upgrade — nothing breaks if left empty.\n\n"
+    "MUSIC  ->  assets/music/<mood>/*.mp3|wav     moods: driving, uplift, tense\n"
+    "   Free CC0 sources: Pixabay Music (https://pixabay.com/music/ — no attribution, commercial OK),\n"
+    "   Free Music Archive (https://freemusicarchive.org/ — filter to CC0).\n"
+    "   ~6-10 tracks per mood gives strong daily variety.\n\n"
+    "SFX    ->  assets/sfx/<name>*.wav|mp3         names: whoosh, riser, tick, thud, chime, impact\n"
+    "   Free CC0 sources: Pixabay SFX (https://pixabay.com/sound-effects/), ZapSplat (CC0 1.0).\n"
+)
+def scaffold_audio():
+    import glob
+    base_m = os.path.join(ROOT, "assets", "music"); base_s = os.path.join(ROOT, "assets", "sfx")
+    for m in AUDIO_MOODS:
+        os.makedirs(os.path.join(base_m, m), exist_ok=True)
+    os.makedirs(base_s, exist_ok=True)
+    with open(os.path.join(ROOT, "assets", "AUDIO_README.txt"), "w", encoding="utf-8") as f:
+        f.write(AUDIO_README)
+    nm = sum(len(glob.glob(os.path.join(base_m, m, "*.*"))) for m in AUDIO_MOODS)
+    ns = len(glob.glob(os.path.join(base_s, "*.*")))
+    print("audio: scaffolded assets/music/{%s}/ + assets/sfx/ (see assets/AUDIO_README.txt)" % ",".join(AUDIO_MOODS))
+    print("  present now: %d music files, %d sfx -> renderer uses them if any, else procedural fallback." % (nm, ns))
+    return 0
+
 def main():
     if "--verify" in sys.argv:
         return verify()
+    if "--audio" in sys.argv:
+        return scaffold_audio()
     dry = "--dry-run" in sys.argv
     print("Apex Studio asset refresh")
     print("fonts:", ", ".join(FONT_CSS))
