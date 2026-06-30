@@ -29,6 +29,7 @@ W, H = 1080, 1350
 KEEP_DIRS  = {"linkedin-dark", "linkedin-light", "fb-dark", "fb-light", "video"}
 KEEP_FILES = {"linkedin.md", "fb.md", "video.md"}
 KICKER = "Owned Demand System"   # carousel kicker (overridable via env APEX_SPEC)
+LUSH = bool(os.environ.get("APEX_LUSH"))   # 1 => render the dark "lush" carousel (matches the video look)
 
 def token_map():
     m = {}
@@ -272,6 +273,30 @@ def render_slide(look, theme, idx, total, inner):
     os.remove(raw)
     return img
 
+def render_slides_lush(slides, kicker, seed):
+    """Render the 5 carousel slides in the dark lush look (matches the video).
+    Uses the fast_render Chrome (with the GL backend the glassmorphism blur needs),
+    one persistent instance for all slides."""
+    import base64 as _b64
+    from io import BytesIO
+    import apex_lush, fast_render as FR
+    imgs, ch = [], FR.Chrome()
+    try:
+        ch.cmd("Emulation.setDeviceMetricsOverride", {"width": W, "height": H, "deviceScaleFactor": 2, "mobile": False})
+        for i, slide in enumerate(slides):
+            html = apex_lush.build_lush_slide_html(slide, i + 1, len(slides), kicker, seed, W, H)
+            tmp = os.path.join(tempfile.gettempdir(), f"apex_lush_slide_{i + 1}.html")
+            with open(tmp, "w", encoding="utf-8") as f: f.write(html)
+            ch.cmd("Page.navigate", {"url": "file:///" + tmp.replace("\\", "/")}); ch.wait_load()
+            shot = ch.cmd("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False})
+            img = Image.open(BytesIO(_b64.b64decode(shot["data"]))).convert("RGB")
+            if img.size != (W, H): img = img.resize((W, H), Image.LANCZOS)
+            imgs.append(img)
+            print(f"  lush slide {i + 1}/{len(slides)}", flush=True)
+    finally:
+        ch.close()
+    return imgs
+
 LINKEDIN_CAPTION = """Ads rent attention. The day you stop paying, your traffic drops to zero.
 
 Swipe through the 5-slide breakdown.
@@ -309,6 +334,7 @@ def cleanup_output():
 # --- optional: load the day's content from a day_spec.json (env APEX_SPEC) ---
 import apex_art
 LOOK = None
+RAW_SLIDES = None   # raw slide dicts (for the lush carousel path; classic path uses SLIDES html)
 _spec_path = os.environ.get("APEX_SPEC")
 if _spec_path and os.path.exists(_spec_path):
     import apex_spec
@@ -317,23 +343,43 @@ if _spec_path and os.path.exists(_spec_path):
     if _spec.get("carousel"):
         _c = _spec["carousel"]
         KICKER = _c["kicker"]
+        RAW_SLIDES = _c.get("slides")
         SLIDES = apex_spec.build_carousel_slides(_c, look=LOOK)
         LINKEDIN_CAPTION, FB_CAPTION = apex_spec.carousel_captions(_c)
-        print("APEX_SPEC carousel loaded:", _spec.get("id", "?"), "| look:", LOOK["lookbook"], LOOK["theme"])
+        print("APEX_SPEC carousel loaded:", _spec.get("id", "?"), "| look:", LOOK["lookbook"], LOOK["theme"], "| lush:", LUSH)
+
+def _save_set(imgs, theme):
+    for plat in ("linkedin", "fb"):
+        d = os.path.join(OUT, f"{plat}-{theme}")
+        os.makedirs(d, exist_ok=True)
+        for old in os.listdir(d):
+            if old.lower().endswith(".png"): os.remove(os.path.join(d, old))
+        for i, im in enumerate(imgs):
+            im.save(os.path.join(d, f"{i + 1:02d}.png"), "PNG")
+        print("  wrote", f"{plat}-{theme}/ ({len(imgs)} slides)")
 
 if __name__ == "__main__":
     if LOOK is None: LOOK = apex_art.choose_look({}, kind="carousel")
-    print("art-direction:", LOOK["lookbook"], "| seed", LOOK["seed"], flush=True)
-    for theme in ("dark", "light"):
-        imgs = [render_slide(LOOK, theme, i + 1, len(SLIDES), inner) for i, inner in enumerate(SLIDES)]
-        for plat in ("linkedin", "fb"):
-            d = os.path.join(OUT, f"{plat}-{theme}")
-            os.makedirs(d, exist_ok=True)
-            for old in os.listdir(d):
-                if old.lower().endswith(".png"): os.remove(os.path.join(d, old))
-            for i, im in enumerate(imgs):
-                im.save(os.path.join(d, f"{i + 1:02d}.png"), "PNG")
-            print("  wrote", f"{plat}-{theme}/ (5 slides)")
+    if LUSH:
+        # dark lush carousel (matches the video). Falls back to a fresh local concept if no spec.
+        slides, kicker = RAW_SLIDES, KICKER
+        if not slides:
+            import apex_concept, apex_spec
+            _sp = apex_concept.generate()
+            slides = _sp["carousel"]["slides"]; kicker = _sp["carousel"]["kicker"]
+            LOOK = apex_art.choose_look(_sp, kind="carousel")
+            LINKEDIN_CAPTION, FB_CAPTION = apex_spec.carousel_captions(_sp["carousel"])
+        print("art-direction: LUSH dark | seed", LOOK["seed"], "| concept", kicker, flush=True)
+        imgs = render_slides_lush(slides, kicker, LOOK["seed"])
+        _save_set(imgs, "dark")
+        for plat in ("linkedin", "fb"):   # drop stale classic light set so the pack is one uniform dark look
+            ld = os.path.join(OUT, f"{plat}-light")
+            if os.path.isdir(ld): shutil.rmtree(ld)
+    else:
+        print("art-direction:", LOOK["lookbook"], "| seed", LOOK["seed"], flush=True)
+        for theme in ("dark", "light"):
+            imgs = [render_slide(LOOK, theme, i + 1, len(SLIDES), inner) for i, inner in enumerate(SLIDES)]
+            _save_set(imgs, theme)
     open(os.path.join(OUT, "linkedin.md"), "w", encoding="utf-8").write(LINKEDIN_CAPTION)
     open(os.path.join(OUT, "fb.md"), "w", encoding="utf-8").write(FB_CAPTION)
     cleanup_output()

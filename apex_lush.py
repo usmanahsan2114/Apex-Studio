@@ -257,3 +257,115 @@ function getT(){{var p=new URLSearchParams(location.search);var v=parseFloat(p.g
 render(getT());
 </script>"""
     return f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style></head><body>{body}</body></html>"
+
+# ---------------- static single-slide build (CAROUSEL, dark lush) ----------------
+def _slide_inner(slide):
+    """Card content for ONE carousel slide dict (headline/sub/tag/motif/meter/chips/cta)."""
+    parts = [_cvec_row(slide)]
+    if slide.get("motif"):
+        parts.append('<div class="lstamp">%s</div>' % apex_spec._arrowify(str(slide["motif"])))
+    if slide.get("tag"):
+        parts.append('<div class="ltag">%s</div>' % apex_spec._amp(slide["tag"]))
+    hl = slide.get("headline", []) or []
+    parts.append('<div class="lh">%s</div>' % "<br>".join(apex_spec.bold_static(x) for x in hl))
+    if slide.get("sub"):
+        parts.append('<div class="lsub">%s</div>' % apex_spec.bold_static(slide["sub"]))
+    mt = slide.get("meter")
+    if mt and mt.get("head"):
+        parts.append('<div class="lmeter"><div class="lmh">%s</div>'
+                     '<div class="lmtrack"><div class="lmfill"></div><div class="lmknob"></div></div>'
+                     '<div class="lmends"><span>%s</span><span class="goal">%s</span></div></div>'
+                     % (apex_spec._amp(mt["head"]), apex_spec._amp(mt.get("left", "")), apex_spec._amp(mt.get("right", ""))))
+    if slide.get("build_chips") or slide.get("growth_chips"):
+        b = "".join('<span class="lchip n">%s</span>' % apex_spec._chip_label(c) for c in slide.get("build_chips", []))
+        g = "".join('<span class="lchip a">%s</span>' % apex_spec._chip_label(c) for c in slide.get("growth_chips", []))
+        parts.append('<div class="lsplit"><div class="lcol"><div class="lcl">Build &middot; Apex IT</div>'
+                     '<div class="lchips">%s</div></div><div class="lcol"><div class="lcl am">Growth &middot; Apex Mktg</div>'
+                     '<div class="lchips">%s</div></div></div>' % (b, g))
+    if slide.get("cta"):
+        parts.append('<div class="lcta">%s</div>' % apex_spec._cta(slide["cta"]))
+    return "".join(parts)
+
+def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350):
+    """Static single carousel slide in the dark lush look. Reuses the SAME seeded palette +
+    field as the video (so the carousel and video read as one set), frozen (no render(t)),
+    with carousel slide copy + a slide-position indicator."""
+    import build_today_video as V
+    seed = int(seed or 0)
+    rng = random.Random(seed ^ 0xABCDEF)
+    P = PALETTES[rng.randrange(len(PALETTES))]
+    field_name = os.environ.get("APEX_FIELD") if os.environ.get("APEX_FIELD") in FIELDS else rng.choice(FIELDS)
+    field_html = _field(field_name, P, W, H, random.Random(seed ^ 0xF1E1D))
+    try:
+        import apex_icons
+        names = apex_spec._auto_icon_names(" ".join(slide.get("headline", []) or []) or kicker, 3)
+        bigs = []
+        for i, n in enumerate(names):
+            a = i * 2.39996323
+            x = int(W * (0.5 + 0.34 * math.cos(a))); y = int(H * (0.20 + 0.12 * math.sin(a * 1.7)))
+            sz = 70 + (i % 3) * 22
+            bigs.append('<span class="bvec" style="left:%dpx;top:%dpx;width:%dpx;height:%dpx">%s</span>'
+                        % (x, y, sz, sz, apex_icons.icon_svg(n, size=sz, cls="ic", accent=(i % 2 == 0))))
+        bigvec_html = '<div class="bigvec-wrap">%s</div>' % "".join(bigs)
+    except Exception:
+        bigvec_html = ""
+    dots = "".join('<span class="pd%s"></span>' % (" on" if i + 1 == idx else "") for i in range(total))
+    GR = V.pack.GRAIN
+    inner = _slide_inner(slide)
+    style = f"""
+*{{margin:0;box-sizing:border-box}}
+html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inter',Arial,sans-serif}}
+.stage{{position:relative;width:{W}px;height:{H}px;background:#06070b;overflow:hidden}}
+.mesh{{position:absolute;inset:-12%;background:{_bg(P)};filter:saturate(0.9) brightness(0.92)}}
+.field{{position:absolute;inset:0;z-index:1;pointer-events:none}}
+.field .fx{{position:absolute;opacity:.5}}
+.field .fx[data-k="bub"]{{opacity:.32}}
+.field .fx[data-k="star"]{{opacity:.6}}
+.vign{{position:absolute;inset:0;z-index:2;background:radial-gradient(135% 105% at 50% 40%, transparent 52%, rgba(0,0,0,.74) 100%)}}
+.grain{{position:absolute;inset:0;z-index:2;opacity:.05;mix-blend-mode:overlay;background:url('{GR}')}}
+.bigvec-wrap{{position:absolute;inset:0;z-index:3;pointer-events:none}}
+.bvec{{position:absolute;transform:translate(-50%,-50%);color:#FFD98A;filter:drop-shadow(0 0 14px rgba(255,200,90,.6));opacity:.42}}
+.bvec .ic.accent{{color:#fff}}
+.pill{{position:absolute;z-index:5;top:54px;left:56px;padding:13px 22px;border-radius:999px;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.10);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.22)}}
+.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:300px;bottom:200px;display:flex;flex-direction:column;justify-content:center}}
+.scene{{position:relative;padding:46px 48px;border-radius:34px;background:linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);border:1px solid rgba(255,255,255,.22);box-shadow:0 40px 100px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.28)}}
+.cvec{{display:flex;gap:14px;margin-bottom:18px}}
+.cvec .cv{{display:inline-flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:15px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#FFD98A;box-shadow:0 8px 22px rgba(0,0,0,.3)}}
+.cvec .cv:nth-child(2){{color:#fff}}
+.cvec .cv .ic{{width:34px;height:34px}}
+.lstamp{{display:inline-flex;align-items:center;font-size:16px;font-weight:700;letter-spacing:.4px;color:rgba(255,255,255,.8);margin-bottom:14px}}
+.lstamp .arr{{color:#FFC21E;font-weight:800;padding:0 8px}}
+.ltag{{font-size:16px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#FFD66B;margin-bottom:14px}}
+.lh{{font-size:62px;font-weight:900;line-height:1.02;letter-spacing:-1.4px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
+.lh b{{color:#FFC21E}}
+.lsub{{margin-top:22px;font-size:30px;font-weight:500;line-height:1.42;color:rgba(255,255,255,.85)}}
+.lsub b{{color:#fff;font-weight:700}}
+.lmeter{{margin-top:28px}}
+.lmh{{font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:12px}}
+.lmtrack{{height:8px;border-radius:5px;background:rgba(255,255,255,.12);position:relative}}
+.lmfill{{position:absolute;left:0;top:0;bottom:0;width:84%;border-radius:5px;background:linear-gradient(90deg,#fff,#FFBE0B)}}
+.lmknob{{position:absolute;left:84%;top:50%;width:15px;height:15px;border-radius:50%;background:#FFBE0B;transform:translate(-50%,-50%);box-shadow:0 0 14px #FFBE0B}}
+.lmends{{display:flex;justify-content:space-between;margin-top:12px;font-size:18px;font-weight:600;color:rgba(255,255,255,.78)}}
+.lmends .goal{{color:#FFC21E}}
+.lsplit{{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:24px}}
+.lcl{{font-size:18px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#fff;margin-bottom:13px}}
+.lcl.am{{color:#FFC21E}}
+.lchips{{display:flex;flex-wrap:wrap;gap:10px}}
+.lchip{{font-size:16px;font-weight:700;padding:11px 16px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);color:#fff}}
+.lchip.a{{border-color:rgba(255,190,11,.55);color:#FFD98A}}
+.lcta{{margin-top:24px;font-size:28px;font-weight:600;line-height:1.4;color:rgba(255,255,255,.9)}}
+.lcta b{{color:#FFC21E;font-weight:800}}
+.dind{{position:absolute;z-index:5;left:0;right:0;bottom:128px;display:flex;gap:10px;align-items:center;justify-content:center}}
+.dind .pd{{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.28)}}
+.dind .pd.on{{width:28px;border-radius:5px;background:#FFBE0B;box-shadow:0 0 14px #FFBE0B}}
+.lock{{position:absolute;z-index:5;left:0;right:0;bottom:64px;display:flex;align-items:center;justify-content:center;gap:15px;font-size:19px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#fff}}
+.lock .dot{{width:8px;height:8px;border-radius:50%;background:#FFBE0B;box-shadow:0 0 14px #FFBE0B}}
+"""
+    body = (f'<div class="stage"><div class="mesh"></div>{field_html}'
+            f'<div class="vign"></div><div class="grain"></div>{bigvec_html}'
+            f'<div class="pill">{apex_spec._amp(kicker)}</div>'
+            f'<div class="cardzone"><div class="scene">{inner}</div></div>'
+            f'<div class="dind">{dots}</div>'
+            f'<div class="lock"><span>APEX IT SOLUTIONS</span><span class="dot"></span><span>APEX MARKETINGS</span></div>'
+            f'</div>')
+    return f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style></head><body>{body}</body></html>"
