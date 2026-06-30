@@ -142,7 +142,33 @@ def _write_manifest(folder, entries):
     with open(os.path.join(folder, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
+def verify():
+    """Re-hash every cached asset against its manifest. Offline; no network.
+    Returns 0 when all present + matching, else 1 (usable as a CI/smoke gate)."""
+    problems = 0
+    for folder, label in ((FONT_DIR, "fonts"), (ICON_DIR, "icons")):
+        mpath = os.path.join(folder, "manifest.json")
+        if not os.path.exists(mpath):
+            print(f"verify {label}: NO MANIFEST ({mpath}) — run `fetch_assets.py` first")
+            problems += 1
+            continue
+        entries = (json.load(open(mpath, encoding="utf-8")) or {}).get("entries", [])
+        ok = miss = bad = 0
+        for e in entries:
+            p = os.path.join(folder, e.get("file", ""))
+            if not os.path.exists(p):
+                miss += 1; problems += 1; print(f"  MISSING  {label}/{e.get('file')}")
+            elif _sha(open(p, "rb").read()) != e.get("sha256"):
+                bad += 1; problems += 1; print(f"  MISMATCH {label}/{e.get('file')}")
+            else:
+                ok += 1
+        print(f"verify {label}: {ok} ok, {miss} missing, {bad} mismatch ({len(entries)} in manifest)")
+    print("VERIFY OK" if problems == 0 else f"VERIFY FAILED: {problems} problem(s)")
+    return 0 if problems == 0 else 1
+
 def main():
+    if "--verify" in sys.argv:
+        return verify()
     dry = "--dry-run" in sys.argv
     print("Apex Studio asset refresh")
     print("fonts:", ", ".join(FONT_CSS))

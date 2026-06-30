@@ -91,6 +91,16 @@ def test_lush_video_html_deterministic():
     assert len(h1) > 2000 and "render(" in h1, "lush video HTML looks malformed"
 
 
+def test_assets_verify_if_present():
+    import fetch_assets
+    fonts_m = os.path.join(ROOT, "assets", "fonts", "manifest.json")
+    icons_m = os.path.join(ROOT, "assets", "icons", "lucide", "manifest.json")
+    if not (os.path.exists(fonts_m) and os.path.exists(icons_m)):
+        print("    (skip: assets not fetched in this environment)")
+        return
+    assert fetch_assets.verify() == 0, "cached assets don't match their manifest"
+
+
 # ----------------- standalone runner (no pytest dependency) -----------------
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
