@@ -273,7 +273,7 @@ def render_slide(look, theme, idx, total, inner):
     os.remove(raw)
     return img
 
-def render_slides_lush(slides, kicker, seed):
+def render_slides_lush(slides, kicker, seed, look=None):
     """Render the 5 carousel slides in the dark lush look (matches the video).
     Uses the fast_render Chrome (with the GL backend the glassmorphism blur needs),
     one persistent instance for all slides."""
@@ -284,7 +284,7 @@ def render_slides_lush(slides, kicker, seed):
     try:
         ch.cmd("Emulation.setDeviceMetricsOverride", {"width": W, "height": H, "deviceScaleFactor": 2, "mobile": False})
         for i, slide in enumerate(slides):
-            html = apex_lush.build_lush_slide_html(slide, i + 1, len(slides), kicker, seed, W, H)
+            html = apex_lush.build_lush_slide_html(slide, i + 1, len(slides), kicker, seed, W, H, look=look)
             tmp = os.path.join(tempfile.gettempdir(), f"apex_lush_slide_{i + 1}.html")
             with open(tmp, "w", encoding="utf-8") as f: f.write(html)
             ch.cmd("Page.navigate", {"url": "file:///" + tmp.replace("\\", "/")}); ch.wait_load()
@@ -370,7 +370,7 @@ if __name__ == "__main__":
             LOOK = apex_art.choose_look(_sp, kind="carousel")
             LINKEDIN_CAPTION, FB_CAPTION = apex_spec.carousel_captions(_sp["carousel"])
         print("art-direction: LUSH dark | seed", LOOK["seed"], "| concept", kicker, flush=True)
-        imgs = render_slides_lush(slides, kicker, LOOK["seed"])
+        imgs = render_slides_lush(slides, kicker, LOOK["seed"], look=LOOK)
         _save_set(imgs, "dark")
         for plat in ("linkedin", "fb"):   # drop stale classic light set so the pack is one uniform dark look
             ld = os.path.join(OUT, f"{plat}-light")

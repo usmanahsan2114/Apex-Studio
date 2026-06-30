@@ -10,7 +10,7 @@ build_lush_html(aspect, concept, tl) -> full HTML. Reuses build_today_video.ASPE
 VO-driven timeline + Kokoro audio + encode. Brand: amber signature + dual-brand lockup kept;
 vibrant color from gradient mesh + tinted vector fields.
 """
-import json, math, os, random
+import base64, json, math, os, random
 import apex_spec
 
 def _hexrgb(h): h = h.lstrip("#"); return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
@@ -38,6 +38,38 @@ PALETTES = [
          tints=["255,200,130", "246,234,224", "224,150,96", "180,120,90"]),
 ]
 FIELDS = ["bubbles", "galaxy", "particles", "orbits"]
+
+# ---- seeded art direction: one motion personality + accent + texture per video/day ----
+# (lock per-day from the seed; this is the lightweight axis engine the design research asked for)
+MOTIONS = ["swiss", "editorial", "kinetic", "pulse"]   # easing/stagger/transition feel
+ACCENTS = ["beam", "underline", "halo", "ring"]         # how the punch word is emphasised
+WIPES = ["left", "right", "up", "diag"]                 # clip-path reveal direction
+# curated display+body font pairings (locally-hosted OFL families; the "type system" axis,
+# locked per-seed so the carousel and video of a day always share one typographic voice)
+PAIRS = [("Archivo", "Inter"), ("Sora", "Manrope"), ("Space Grotesk", "Inter"),
+         ("Syne", "Manrope"), ("Fraunces", "Geist"), ("Bricolage Grotesque", "Inter"),
+         ("Geist", "Inter"), ("Sora", "Inter")]
+
+def _art(seed):
+    r = random.Random((int(seed) or 0) ^ 0x5EED5)
+    disp_fam, body_fam = r.choice(PAIRS)
+    return {
+        "motion": r.choice(MOTIONS),
+        "accent": r.choice(ACCENTS),
+        "wipe": r.choice(WIPES),
+        "grain": round(r.uniform(0.62, 0.92), 2),   # feTurbulence baseFrequency (grain coarseness)
+        "goct": r.choice([2, 2, 3]),                 # octaves
+        "disp": disp_fam, "body": body_fam,          # seed-locked type pairing (display, body)
+    }
+
+def _grain_uri(freq, octaves):
+    """Seeded SVG fractal-noise (feTurbulence) grain — kills dark-gradient banding + adds
+    editorial paper texture. Native browser filter, static across the render loop (deterministic)."""
+    svg = ("<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>"
+           "<filter id='g'><feTurbulence type='fractalNoise' baseFrequency='%s' numOctaves='%d' stitchTiles='stitch'/>"
+           "<feColorMatrix type='saturate' values='0'/></filter>"
+           "<rect width='240' height='240' filter='url(#g)'/></svg>" % (freq, int(octaves)))
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 def _bg(P):
     return ",".join(f"radial-gradient(820px 760px at {pos}, rgba({rgb},{a}), transparent 62%)"
@@ -119,6 +151,11 @@ def build_lush_html(aspect, concept, tl):
     A = V.ASPECTS[aspect]; W, H = A["w"], A["h"]
     look = concept.get("look") or {}
     seed = int(look.get("seed", 0) or 0)
+    AD = _art(seed); GR = _grain_uri(AD["grain"], AD["goct"])
+    import apex_art
+    ff = apex_art.fontface_css({"fonts": {"display": AD["disp"], "body": AD["body"]}})  # @font-face (seed-locked pairing)
+    disp = apex_art._font_stack(AD["disp"])   # premium display face (headline)
+    body = apex_art._font_stack(AD["body"])   # body face (sub/labels)
     rng = random.Random(seed ^ 0xABCDEF)
     P = PALETTES[rng.randrange(len(PALETTES))]
     field_name = os.environ.get("APEX_FIELD") if os.environ.get("APEX_FIELD") in FIELDS else rng.choice(FIELDS)
@@ -146,13 +183,14 @@ def build_lush_html(aspect, concept, tl):
     kicker = concept.get("kicker", "Apex")
     style = f"""
 *{{margin:0;box-sizing:border-box}}
-html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inter',Arial,sans-serif}}
+{ff}
+html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .stage{{position:relative;width:{W}px;height:{H}px;background:#06070b;overflow:hidden}}
 .mesh{{position:absolute;inset:-12%;background:{_bg(P)};filter:saturate(0.9) brightness(0.92);will-change:transform}}
 .field{{position:absolute;inset:0;z-index:1;pointer-events:none;transform-origin:50% 40%}}
 .field .fx{{position:absolute;will-change:transform,opacity}}
 .vign{{position:absolute;inset:0;z-index:2;background:radial-gradient(135% 105% at 50% 40%, transparent 52%, rgba(0,0,0,.74) 100%)}}
-.grain{{position:absolute;inset:0;z-index:2;opacity:.05;mix-blend-mode:overlay;background:url('{V.pack.GRAIN}')}}
+.grain{{position:absolute;inset:0;z-index:2;opacity:.07;mix-blend-mode:overlay;background:url('{GR}')}}
 .bigvec-wrap{{position:absolute;inset:0;z-index:3;pointer-events:none}}
 .bvec{{position:absolute;transform:translate(-50%,-50%);color:#FFD98A;filter:drop-shadow(0 0 14px rgba(255,200,90,.7));opacity:.5}}
 .bvec .ic.accent{{color:#FFFFFF}}
@@ -171,8 +209,12 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 .cvec .cv:nth-child(2){{color:#fff}}
 .cvec .cv .ic{{width:38px;height:38px}}
 .ltag{{font-size:17px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#FFD66B;margin-bottom:16px}}
-.lh{{font-size:{int(A['lg']*0.92)}px;font-weight:900;line-height:1.0;letter-spacing:-1.8px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
+.lh{{font-family:{disp};font-size:{int(A['lg']*0.92)}px;font-weight:900;line-height:1.0;letter-spacing:-1.8px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
 .lh b{{color:#FFC21E}} .lh b.punch{{background:linear-gradient(90deg,#FFD54A,#FF8A3D);-webkit-background-clip:text;background-clip:text;color:transparent}}
+.acc-halo .lh b.punch{{filter:drop-shadow(0 0 22px rgba(255,190,11,.45))}}
+.acc-beam .scene{{border-left:3px solid rgba(255,190,11,.55)}}
+.acc-underline .lh{{padding-bottom:8px;border-bottom:2px solid rgba(255,190,11,.32)}}
+.acc-ring .scene{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
 .lsub{{margin-top:22px;font-size:{A['sub']-2}px;font-weight:500;line-height:1.4;color:rgba(255,255,255,.85);max-width:820px}}
 .lsub b{{color:#fff;font-weight:700}}
 .lsplit{{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:26px}}
@@ -188,7 +230,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 .pbar{{height:100%;width:0;background:linear-gradient(90deg,#fff,#FFBE0B)}}
 """
     body = f"""
-<div class="stage">
+<div class="stage acc-{AD['accent']}">
  <div class="mesh"></div>
  {field_html}
  <div class="vign"></div><div class="grain"></div>
@@ -200,10 +242,21 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 </div>
 <script>
 var W={W},H={H},TL={json.dumps(tl)};
+var MOTION={json.dumps(AD['motion'])},WIPE={json.dumps(AD['wipe'])};
 function c01(x){{return x<0?0:x>1?1:x;}}
 function lerp(a,b,u){{return a+(b-a)*u;}}
 function eOut(u){{return 1-Math.pow(1-u,3);}}
 function eIn(u){{return u*u;}}
+function eOutQ(u){{return 1-Math.pow(1-u,4);}}
+function eInOut(u){{return u<0.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;}}
+function easeEnter(u){{return MOTION==='editorial'?eInOut(u):(MOTION==='kinetic'?eOutQ(u):eOut(u));}}
+var ENT=MOTION==='editorial'?0.72:(MOTION==='kinetic'?0.40:(MOTION==='pulse'?0.52:0.55));
+var STAG=MOTION==='kinetic'?0.14:(MOTION==='editorial'?0.05:0.10);
+function wipeClip(u){{var p=100*(1-u);
+  if(WIPE==='left')return 'inset(0 '+p.toFixed(1)+'% 0 0 round 36px)';
+  if(WIPE==='right')return 'inset(0 0 0 '+p.toFixed(1)+'% round 36px)';
+  if(WIPE==='up')return 'inset('+p.toFixed(1)+'% 0 0 0 round 36px)';
+  return 'inset('+(p*0.62).toFixed(1)+'% '+(p*0.62).toFixed(1)+'% 0 0 round 36px)';}}
 var FXL=document.querySelectorAll('.field .fx');
 var FIELD=document.querySelector('.field'); var FN=FIELD?FIELD.getAttribute('data-field'):'';
 var CX=FIELD?+(FIELD.getAttribute('data-cx')||0):0, CY=FIELD?+(FIELD.getAttribute('data-cy')||0):0;
@@ -241,11 +294,12 @@ function render(t){{
    var lo=t-s.start,ln=s.end-s.start;
    if(lo<-0.3||lo>ln+0.05){{el.style.display='none';continue;}}
    el.style.display='block';
-   var en=eOut(c01(lo/0.5)), ex=eIn(c01((lo-(ln-0.45))/0.45));
-   el.style.opacity=(en*(1-ex)).toFixed(3);
-   el.style.transform='translateY('+((1-en)*46 - ex*30).toFixed(1)+'px) scale('+(lerp(0.92,1,en)-ex*0.05).toFixed(3)+')';
+   var en=easeEnter(c01(lo/ENT)), ex=eIn(c01((lo-(ln-0.42))/0.42));
+   el.style.opacity=(c01(lo/0.16)*(1-ex)).toFixed(3);
+   el.style.clipPath=wipeClip(en);
+   el.style.transform='translateY('+((1-en)*(MOTION==='kinetic'?34:22) - ex*26).toFixed(1)+'px) scale('+(lerp(0.965,1,en)-ex*0.04).toFixed(3)+')';
    var cv=el.querySelectorAll('.cvec .cv');
-   for(var ci=0;ci<cv.length;ci++){{var cu=eOut(c01((lo-0.2-ci*0.12)/0.5));
+   for(var ci=0;ci<cv.length;ci++){{var cu=easeEnter(c01((lo-0.18-ci*STAG)/0.5));
      cv[ci].style.opacity=cu.toFixed(3);
      cv[ci].style.transform='translateY('+((1-cu)*16).toFixed(1)+'px) scale('+lerp(0.6,1,cu).toFixed(3)+') rotate('+(Math.sin(t*0.8+ci)*4).toFixed(1)+'deg)';}}
    var pn=el.querySelectorAll('.punch');
@@ -286,12 +340,16 @@ def _slide_inner(slide):
         parts.append('<div class="lcta">%s</div>' % apex_spec._cta(slide["cta"]))
     return "".join(parts)
 
-def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350):
+def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350, look=None):
     """Static single carousel slide in the dark lush look. Reuses the SAME seeded palette +
-    field as the video (so the carousel and video read as one set), frozen (no render(t)),
-    with carousel slide copy + a slide-position indicator."""
-    import build_today_video as V
+    field + art direction (grain/accent/fonts) as the video, so the carousel and video read
+    as one campaign. Frozen (no render(t)), with carousel slide copy + a slide-position bar."""
+    import build_today_video as V, apex_art
     seed = int(seed or 0)
+    AD = _art(seed)
+    ff = apex_art.fontface_css({"fonts": {"display": AD["disp"], "body": AD["body"]}})
+    disp = apex_art._font_stack(AD["disp"])
+    body = apex_art._font_stack(AD["body"])
     rng = random.Random(seed ^ 0xABCDEF)
     P = PALETTES[rng.randrange(len(PALETTES))]
     field_name = os.environ.get("APEX_FIELD") if os.environ.get("APEX_FIELD") in FIELDS else rng.choice(FIELDS)
@@ -310,11 +368,12 @@ def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350):
     except Exception:
         bigvec_html = ""
     dots = "".join('<span class="pd%s"></span>' % (" on" if i + 1 == idx else "") for i in range(total))
-    GR = V.pack.GRAIN
+    GR = _grain_uri(AD["grain"], AD["goct"])
     inner = _slide_inner(slide)
     style = f"""
 *{{margin:0;box-sizing:border-box}}
-html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inter',Arial,sans-serif}}
+{ff}
+html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .stage{{position:relative;width:{W}px;height:{H}px;background:#06070b;overflow:hidden}}
 .mesh{{position:absolute;inset:-12%;background:{_bg(P)};filter:saturate(0.9) brightness(0.92)}}
 .field{{position:absolute;inset:0;z-index:1;pointer-events:none}}
@@ -322,7 +381,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 .field .fx[data-k="bub"]{{opacity:.32}}
 .field .fx[data-k="star"]{{opacity:.6}}
 .vign{{position:absolute;inset:0;z-index:2;background:radial-gradient(135% 105% at 50% 40%, transparent 52%, rgba(0,0,0,.74) 100%)}}
-.grain{{position:absolute;inset:0;z-index:2;opacity:.05;mix-blend-mode:overlay;background:url('{GR}')}}
+.grain{{position:absolute;inset:0;z-index:2;opacity:.07;mix-blend-mode:overlay;background:url('{GR}')}}
 .bigvec-wrap{{position:absolute;inset:0;z-index:3;pointer-events:none}}
 .bvec{{position:absolute;transform:translate(-50%,-50%);color:#FFD98A;filter:drop-shadow(0 0 14px rgba(255,200,90,.6));opacity:.42}}
 .bvec .ic.accent{{color:#fff}}
@@ -336,8 +395,12 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 .lstamp{{display:inline-flex;align-items:center;font-size:16px;font-weight:700;letter-spacing:.4px;color:rgba(255,255,255,.8);margin-bottom:14px}}
 .lstamp .arr{{color:#FFC21E;font-weight:800;padding:0 8px}}
 .ltag{{font-size:16px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#FFD66B;margin-bottom:14px}}
-.lh{{font-size:62px;font-weight:900;line-height:1.02;letter-spacing:-1.4px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
+.lh{{font-family:{disp};font-size:62px;font-weight:900;line-height:1.02;letter-spacing:-1.4px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
 .lh b{{color:#FFC21E}}
+.acc-halo .lh b{{filter:drop-shadow(0 0 18px rgba(255,190,11,.4))}}
+.acc-beam .scene{{border-left:3px solid rgba(255,190,11,.55)}}
+.acc-underline .lh{{padding-bottom:8px;border-bottom:2px solid rgba(255,190,11,.32)}}
+.acc-ring .scene{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
 .lsub{{margin-top:22px;font-size:30px;font-weight:500;line-height:1.42;color:rgba(255,255,255,.85)}}
 .lsub b{{color:#fff;font-weight:700}}
 .lmeter{{margin-top:28px}}
@@ -361,7 +424,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:'Segoe UI','Inte
 .lock{{position:absolute;z-index:5;left:0;right:0;bottom:64px;display:flex;align-items:center;justify-content:center;gap:15px;font-size:19px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#fff}}
 .lock .dot{{width:8px;height:8px;border-radius:50%;background:#FFBE0B;box-shadow:0 0 14px #FFBE0B}}
 """
-    body = (f'<div class="stage"><div class="mesh"></div>{field_html}'
+    body = (f'<div class="stage acc-{AD["accent"]}"><div class="mesh"></div>{field_html}'
             f'<div class="vign"></div><div class="grain"></div>{bigvec_html}'
             f'<div class="pill">{apex_spec._amp(kicker)}</div>'
             f'<div class="cardzone"><div class="scene">{inner}</div></div>'
