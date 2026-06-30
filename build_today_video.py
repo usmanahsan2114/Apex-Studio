@@ -109,26 +109,51 @@ def _tone(freq, dur, kind, amp, env):
     w = (2*((t*freq) % 1)-1) if kind == "saw" else np.sin(2*np.pi*freq*t)
     return w*_adsr(n, *env)*amp
 
+def _kick(dur=0.5):
+    n = int(dur*SR); t = np.arange(n)/SR
+    f = 120*np.exp(-24*t) + 48                       # punchy pitch drop
+    body = np.sin(2*np.pi*np.cumsum(f)/SR)*np.exp(-7*t)
+    click = np.random.default_rng(3).standard_normal(n)*np.exp(-120*t)*0.35
+    return (body + click).astype(np.float32)
+def _hat(dur=0.07, opn=False):
+    n = int(dur*SR); x = np.random.default_rng(11).standard_normal(n)
+    b, a = butter(2, 7500/(SR/2), "high"); x = lfilter(b, a, x)
+    return (x*np.exp(-(7 if opn else 22)*np.arange(n)/SR)).astype(np.float32)
+
 def make_music(mood, seconds):
+    """Procedural production-music bed: pad + rhythmic bassline + kick + hats + arp, per mood.
+    Deterministic (fixed-seed noise). Sits under the ducked VO; drums carry the intro/gaps."""
     n = int(seconds*SR); out = np.zeros(n)
-    P = {"driving": dict(root=-5, bpm=120, prog=[0,-2,-5,-7], bright=2600, minor=True,  arp=True),
-         "uplift":  dict(root=0,  bpm=110, prog=[0,5,7,5],    bright=3200, minor=False, arp=True),
-         "tense":   dict(root=-7, bpm=92,  prog=[0,-3,-5,-3], bright=1500, minor=True,  arp=False)}.get(mood, None)
-    if P is None: P = {"root":-5,"bpm":112,"prog":[0,-2,-5,-7],"bright":2600,"minor":True,"arp":True}
+    P = {"driving": dict(root=-5, bpm=120, prog=[0,-2,-5,-7], bright=2600, minor=True,  arp=True,  kick=[0,1,2,3], hats="closed", bass=1.0),
+         "uplift":  dict(root=0,  bpm=110, prog=[0,5,7,5],    bright=3200, minor=False, arp=True,  kick=[0,2],     hats="open",   bass=0.85),
+         "tense":   dict(root=-7, bpm=92,  prog=[0,-3,-5,-3], bright=1500, minor=True,  arp=False, kick=[0,2],     hats=None,     bass=0.7)}.get(mood, None)
+    if P is None: P = dict(root=-5, bpm=112, prog=[0,-2,-5,-7], bright=2600, minor=True, arp=True, kick=[0,1,2,3], hats="closed", bass=1.0)
     iv = [0,3,7,10] if P["minor"] else [0,4,7,11]
     beat = 60/P["bpm"]; bar = beat*4; nb = int(np.ceil(seconds/bar))
+    kick = _kick(min(0.5, beat*0.9)); hat_c = _hat(0.06, False); hat_o = _hat(0.13, True)
+    def place(buf, sig, at_s, g=1.0):
+        i = int(at_s*SR); j = min(len(buf), i+len(sig))
+        if j > i: buf[i:j] += sig[:j-i]*g
     for b in range(nb):
         root = P["root"] + P["prog"][b % len(P["prog"])]; start = int(b*bar*SR)
-        pad = np.zeros(int(bar*SR))
+        seglen = int(bar*SR); pad = np.zeros(seglen)
         for k in iv[:3]:
-            tt = _tone(_note(root+k), bar, "saw", 0.10, (0.4,0.3,0.7,0.6)); pad[:len(tt)] += tt[:len(pad)]
-        seg = _lp(pad, P["bright"]) + _tone(_note(root-12), bar, "sine", 0.22, (0.02,0.2,0.7,0.3))[:len(pad)]
+            tt = _tone(_note(root+k), bar, "saw", 0.10, (0.4,0.3,0.7,0.6)); pad[:len(tt)] += tt[:seglen]
+        seg = _lp(pad, P["bright"])
+        if P["bass"]:                                # rhythmic bassline on every beat
+            for bi in range(4):
+                place(seg, _lp(_tone(_note(root-12), beat*0.92, "saw", 0.20*P["bass"], (0.006,0.09,0.55,0.16)), 430), bi*beat)
         if P["arp"]:
             for i in range(8):
-                a = _tone(_note(root+12+iv[i % len(iv)]), beat/2, "sine", 0.06, (0.005,0.06,0,0.02))
-                s0 = int(i*(bar/8)*SR); seg[s0:s0+len(a)] += a[:max(0, len(seg)-s0)]
-        e = min(n, start+len(seg)); out[start:e] += seg[:e-start]
-    out = out/(np.max(np.abs(out))+1e-9)*0.7
+                place(seg, _tone(_note(root+12+iv[i % len(iv)]), beat/2, "sine", 0.06, (0.005,0.06,0,0.02)), i*(bar/8))
+        for kb in P["kick"]:                          # kick drum
+            place(seg, kick, kb*beat, 0.9)
+        if P["hats"]:                                 # hats on the offbeat 8ths
+            hs = hat_o if P["hats"] == "open" else hat_c
+            for hi in range(1, 8, 2):
+                place(seg, hs, hi*(beat/2), 0.22)
+        e = min(n, start+seglen); out[start:e] += seg[:e-start]
+    out = out/(np.max(np.abs(out))+1e-9)*0.72
     f = int(0.8*SR); out[:f] *= np.linspace(0,1,f); out[-f:] *= np.linspace(1,0,f)
     return out.astype(np.float32)
 
