@@ -136,6 +136,51 @@ def _slide_arch(seed, idx, total):
     if idx == total: return r.choice(["card", "hero"])
     return "card"
 
+# real 3D depth layer (three.js, software-WebGL, deterministic). Subtle low-poly forms drifting
+# in deep space BEHIND the 2D field + glass cards. Gated by APEX_3D (default on for lush);
+# fully self-fallback (if three.js fails to load/init, window.T3D stays false and the 2D look stands).
+_ENABLE_3D = os.environ.get("APEX_3D", "1") != "0"
+def _three_block(seed, P, W, H):
+    if not _ENABLE_3D:
+        return "", ""
+    import build_today_video as V
+    try:
+        three_src = open(os.path.join(V.ROOT, "assets", "vendor", "three.min.js"), encoding="utf-8").read()
+    except Exception:
+        return "", ""
+    r = random.Random((int(seed) or 0) ^ 0x3D3D3D)
+    tints = P["tints"]
+    objs = [dict(shape=r.choice(["ico", "oct", "torus", "box", "dodec"]),
+                 x=round(r.uniform(-9, 9), 2), y=round(r.uniform(-4, 5), 2), z=round(r.uniform(-18, -7), 2),
+                 s=round(r.uniform(0.7, 2.0), 2), rx=round(r.uniform(0.04, 0.26), 3),
+                 ry=round(r.uniform(0.04, 0.26), 3), col=r.choice(tints), amp=round(r.uniform(0.3, 0.7), 2))
+            for _ in range(7)]
+    canvas = '<canvas id="t3d"></canvas>'
+    js = ("<script>" + three_src + "</script>\n<script>\n(function(){try{\n"
+          "var cv=document.getElementById('t3d');\n"
+          "var rnd=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});\n"
+          f"rnd.setSize({W},{H},false); rnd.setPixelRatio(1);\n"
+          "var scn=new THREE.Scene(); scn.fog=new THREE.FogExp2(0x06070b,0.05);\n"
+          f"var cam=new THREE.PerspectiveCamera(55,{W}/{H},0.1,100); cam.position.set(0,0,9);\n"
+          "scn.add(new THREE.AmbientLight(0x44506a,0.75));\n"
+          "var dl=new THREE.DirectionalLight(0xffffff,0.55); dl.position.set(3,5,6); scn.add(dl);\n"
+          "var pl=new THREE.PointLight(0xffbe0b,1.2,42); pl.position.set(-4,2,5); scn.add(pl);\n"
+          "function geom(s){if(s==='ico')return new THREE.IcosahedronGeometry(1,0);"
+          "if(s==='oct')return new THREE.OctahedronGeometry(1,0);"
+          "if(s==='dodec')return new THREE.DodecahedronGeometry(1,0);"
+          "if(s==='torus')return new THREE.TorusGeometry(0.8,0.3,10,28);"
+          "return new THREE.BoxGeometry(1.3,1.3,1.3);}\n"
+          "var SPEC=" + json.dumps(objs) + ", M=[];\n"
+          "for(var i=0;i<SPEC.length;i++){var o=SPEC[i];var c=o.col.split(',').map(Number);\n"
+          "var mat=new THREE.MeshStandardMaterial({color:(c[0]<<16)|(c[1]<<8)|c[2],metalness:0.45,roughness:0.55,flatShading:true,transparent:true,opacity:0.62});\n"
+          "var me=new THREE.Mesh(geom(o.shape),mat); me.position.set(o.x,o.y,o.z); me.scale.set(o.s,o.s,o.s); me.userData=o; scn.add(me); M.push(me);\n"
+          "me.add(new THREE.LineSegments(new THREE.EdgesGeometry(me.geometry),new THREE.LineBasicMaterial({color:0xffd98a,transparent:true,opacity:0.28})));}\n"
+          "window.renderThreeScene=function(t){for(var i=0;i<M.length;i++){var o=M[i].userData;\n"
+          "M[i].rotation.x=t*o.rx; M[i].rotation.y=t*o.ry; M[i].position.y=o.y+Math.sin(t*0.25+i)*o.amp;}\n"
+          "cam.position.x=Math.sin(t*0.08)*1.3; cam.position.y=Math.cos(t*0.07)*0.9; cam.lookAt(0,0,-8); rnd.render(scn,cam);};\n"
+          "window.T3D=true;\n}catch(e){window.T3D=false;}})();\n</script>")
+    return canvas, js
+
 def _bg(P):
     return ",".join(f"radial-gradient(820px 760px at {pos}, rgba({rgb},{a}), transparent 62%)"
                     for pos, rgb, a in P["blobs"])
@@ -225,6 +270,7 @@ def build_lush_html(aspect, concept, tl):
     P = PALETTES[rng.randrange(len(PALETTES))]
     field_name = os.environ.get("APEX_FIELD") if os.environ.get("APEX_FIELD") in FIELDS else rng.choice(FIELDS)
     field_html = _field(field_name, P, W, H, random.Random(seed ^ 0xF1E1D))
+    t3d_canvas, t3d_js = _three_block(seed, P, W, H)   # real 3D depth layer (behind field); "" if disabled/failed
     beats = (concept.get("raw_video") or {}).get("scenes") or []
     if not beats:
         beats = [{"headline": [s]} for s in concept.get("scenes", [])]
@@ -254,6 +300,7 @@ def build_lush_html(aspect, concept, tl):
 {ff}
 html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .stage{{position:relative;width:{W}px;height:{H}px;background:#06070b;overflow:hidden}}
+#t3d{{position:absolute;inset:0;z-index:0;pointer-events:none}}
 .mesh{{position:absolute;inset:-12%;background:{_bg(P)};filter:saturate(0.9) brightness(0.92);will-change:transform}}
 .field{{position:absolute;inset:0;z-index:1;pointer-events:none;transform-origin:50% 40%}}
 .field .fx{{position:absolute;will-change:transform,opacity}}
@@ -274,7 +321,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
  backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);
  border:1px solid rgba(255,255,255,.22);box-shadow:0 44px 110px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.28);will-change:transform,opacity}}
 .arch-rail .card{{max-width:90%}}
-.arch-hero .card{{background:none;border:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0 10px;max-width:94%}}
+.arch-hero .card{{background:radial-gradient(120% 88% at 50% 46%, rgba(6,7,11,.62), rgba(6,7,11,.28) 58%, transparent 80%);border:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:34px 28px;max-width:94%}}
 .arch-hero .lh{{font-size:{int(A['lg']*1.12)}px;letter-spacing:-2.4px}}
 .arch-hero .cvec{{justify-content:center}}
 .cvec{{display:flex;gap:16px;margin-bottom:20px}}
@@ -307,6 +354,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
     body = f"""
 <div class="stage acc-{AD['accent']}">
  <div class="mesh"></div>
+ {t3d_canvas}
  {field_html}
  <div class="vign"></div><div class="grain"></div>
  {bigvec_html}
@@ -315,6 +363,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
  <div class="lock"><span>APEX IT SOLUTIONS</span><span class="dot"></span><span>APEX MARKETINGS</span></div>
  <div class="pbarw"><div class="pbar"></div></div>
 </div>
+{t3d_js}
 <script>
 var W={W},H={H},TL={json.dumps(tl)};
 var MOTION={json.dumps(AD['motion'])},WIPE={json.dumps(AD['wipe'])};
@@ -361,6 +410,7 @@ function animField(t){{
 }}
 function render(t){{
  var ab=activeBeat(t),aI=ab[0],aP=ab[1];
+ if(window.renderThreeScene){{try{{renderThreeScene(t);}}catch(e){{}}}}
  animField(t);
  var mz=document.querySelector('.mesh'); if(mz)mz.style.transform='translate('+(Math.sin(t*0.13)*22).toFixed(1)+'px,'+(Math.cos(t*0.11)*18).toFixed(1)+'px)';
  var pb=document.querySelector('.pbar'); if(pb)pb.style.width=(c01(t/TL.total)*100)+'%';
