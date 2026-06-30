@@ -39,6 +39,7 @@ def get_concept():
         c = dict(VC.get_today())
     c["look"] = look
     c["raw_video"] = (spec.get("video") if (spec and spec.get("video")) else None)  # raw beats for apex_lush
+    c["art"] = (spec or {}).get("art_direction")  # pinned art axes (anti-repeat); None => seed-derived
     # carousel captions so a video render keeps every platform .md file in sync with the concept
     if spec and spec.get("carousel"):
         try:

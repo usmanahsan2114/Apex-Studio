@@ -368,6 +368,11 @@ def generate(seed=None, topic=None, date=None):
     }
     spec = {"id": p["key"] + "_" + suffix, "date": date, "topic": p["topic"],
             "seed": seed, "look": "auto", "carousel": carousel, "video": video}
+    try:   # pin the day's art axes with cross-day anti-repeat; shared by carousel + video
+        import apex_lush
+        spec["art_direction"] = apex_lush.pick_art(seed)
+    except Exception:
+        pass
     try:
         import apex_spec
         ok, errs = apex_spec.validate(spec)

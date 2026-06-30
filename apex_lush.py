@@ -50,17 +50,59 @@ PAIRS = [("Archivo", "Inter"), ("Sora", "Manrope"), ("Space Grotesk", "Inter"),
          ("Syne", "Manrope"), ("Fraunces", "Geist"), ("Bricolage Grotesque", "Inter"),
          ("Geist", "Inter"), ("Sora", "Inter")]
 
-def _art(seed):
+def _art(seed, override=None):
+    """The day's art axes. Pure seed-derived by default (deterministic). If `override`
+    (a pinned `art_direction` from day_spec) is given, its keys win — that's how anti-repeat
+    selection (pick_art) is honoured identically by the carousel and the video of one post."""
     r = random.Random((int(seed) or 0) ^ 0x5EED5)
     disp_fam, body_fam = r.choice(PAIRS)
-    return {
+    ad = {
         "motion": r.choice(MOTIONS),
         "accent": r.choice(ACCENTS),
         "wipe": r.choice(WIPES),
         "grain": round(r.uniform(0.62, 0.92), 2),   # feTurbulence baseFrequency (grain coarseness)
         "goct": r.choice([2, 2, 3]),                 # octaves
-        "disp": disp_fam, "body": body_fam,          # seed-locked type pairing (display, body)
+        "disp": disp_fam, "body": body_fam,          # type pairing (display, body)
     }
+    if override:
+        for k in list(ad.keys()):
+            if override.get(k):
+                ad[k] = override[k]
+    return ad
+
+def _design_mem_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "design_memory.json")
+
+def pick_art(seed, remember=True):
+    """Choose the day's art axes with cross-day ANTI-REPEAT (design_memory.json keeps the last
+    few values per axis so consecutive days don't reuse the same motion/accent/type pairing).
+    Deterministic given (seed, memory). Call ONCE at concept generation and pin into day_spec
+    as `art_direction`; both renderers then read it via _art(seed, art_direction)."""
+    try:
+        with open(_design_mem_path(), encoding="utf-8") as f:
+            mem = json.load(f) or {}
+    except Exception:
+        mem = {}
+    r = random.Random((int(seed) or 0) ^ 0xC0FFEE)
+    def pick(axis, options, avoid=2):
+        recent = (mem.get(axis) or [])[-avoid:]
+        pool = [o for o in options if o not in recent] or list(options)
+        return r.choice(pool)
+    motion, accent = pick("motion", MOTIONS), pick("accent", ACCENTS)
+    pair_i = pick("pair", list(range(len(PAIRS))))
+    disp_fam, body_fam = PAIRS[pair_i]
+    ad = {"motion": motion, "accent": accent, "wipe": r.choice(WIPES),
+          "grain": round(r.uniform(0.62, 0.92), 2), "goct": r.choice([2, 2, 3]),
+          "disp": disp_fam, "body": body_fam}
+    if remember:
+        for axis, val in (("motion", motion), ("accent", accent), ("pair", pair_i)):
+            mem[axis] = ((mem.get(axis) or []) + [val])[-6:]
+        try:
+            with open(_design_mem_path(), "w", encoding="utf-8") as f:
+                json.dump(mem, f)
+        except Exception:
+            pass
+    return ad
 
 def _grain_uri(freq, octaves):
     """Seeded SVG fractal-noise (feTurbulence) grain — kills dark-gradient banding + adds
@@ -70,6 +112,29 @@ def _grain_uri(freq, octaves):
            "<feColorMatrix type='saturate' values='0'/></filter>"
            "<rect width='240' height='240' filter='url(#g)'/></svg>" % (freq, int(octaves)))
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+# composition archetypes (seeded, beat-aware): the day's scenes are NOT all the same centered
+# card. hero = full-bleed billboard type (no card), rail = left-aligned tension, card = glass card.
+# Lockup, pill, progress + safe zones are unchanged regardless of archetype.
+def _archetypes(seed, n=6):
+    r = random.Random((int(seed) or 0) ^ 0xA12C7)
+    out = []
+    for i in range(n):
+        if i == 0:    out.append(r.choice(["hero", "hero", "card"]))   # hook -> usually billboard
+        elif i == 2:  out.append(r.choice(["hero", "card"]))           # peak -> full-bleed type
+        elif i == 3:  out.append(r.choice(["rail", "card"]))           # reframe -> editorial rail
+        elif i == 5:  out.append(r.choice(["card", "hero"]))           # cta
+        else:         out.append("card")                               # problem(1) + fix(4): glass card
+    return out
+
+def _slide_arch(seed, idx, total):
+    """Archetype for ONE carousel slide (1-based idx). Mirrors the video beat roles:
+    1 hook, 2 problem, 3 reframe, 4 fix, 5 cta."""
+    r = random.Random((int(seed) or 0) ^ 0xA12C7 ^ (idx * 7))
+    if idx == 1:   return r.choice(["hero", "hero", "card"])
+    if idx == 3:   return r.choice(["rail", "card"])
+    if idx == total: return r.choice(["card", "hero"])
+    return "card"
 
 def _bg(P):
     return ",".join(f"radial-gradient(820px 760px at {pos}, rgba({rgb},{a}), transparent 62%)"
@@ -151,7 +216,7 @@ def build_lush_html(aspect, concept, tl):
     A = V.ASPECTS[aspect]; W, H = A["w"], A["h"]
     look = concept.get("look") or {}
     seed = int(look.get("seed", 0) or 0)
-    AD = _art(seed); GR = _grain_uri(AD["grain"], AD["goct"])
+    AD = _art(seed, concept.get("art")); GR = _grain_uri(AD["grain"], AD["goct"])
     import apex_art
     ff = apex_art.fontface_css({"fonts": {"display": AD["disp"], "body": AD["body"]}})  # @font-face (seed-locked pairing)
     disp = apex_art._font_stack(AD["disp"])   # premium display face (headline)
@@ -179,7 +244,10 @@ def build_lush_html(aspect, concept, tl):
         bigvec_html = '<div class="bigvec-wrap">%s</div>' % "".join(bigs)
     except Exception:
         bigvec_html = ""
-    scene_divs = "\n".join(f'<div class="scene" id="s{i+1}">{_scene_inner(b)}</div>' for i, b in enumerate(beats[:6]))
+    arch = _archetypes(seed, len(beats[:6]))
+    scene_divs = "\n".join(
+        f'<div class="scene arch-{arch[i]}" id="s{i+1}"><div class="card">{_scene_inner(b)}</div></div>'
+        for i, b in enumerate(beats[:6]))
     kicker = concept.get("kicker", "Apex")
     style = f"""
 *{{margin:0;box-sizing:border-box}}
@@ -197,11 +265,18 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .pill{{position:absolute;z-index:5;top:{A['safe_top']+30}px;left:60px;padding:13px 22px;border-radius:999px;font-size:16px;font-weight:800;
  letter-spacing:3px;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.10);
  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.22)}}
-.cardzone{{position:absolute;z-index:4;left:56px;right:56px;bottom:{A['safe_bottom']+150}px;height:{int(H*0.42)}px}}
-.scene{{position:absolute;left:0;right:0;bottom:0;padding:48px 50px;border-radius:36px;
+.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:{A['safe_top']+128}px;bottom:{A['safe_bottom']+98}px}}
+.scene{{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end}}
+.scene.arch-rail{{align-items:flex-start}}
+.scene.arch-hero{{justify-content:center;align-items:center;text-align:center}}
+.card{{position:relative;padding:48px 50px;border-radius:36px;
  background:linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));
  backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);
  border:1px solid rgba(255,255,255,.22);box-shadow:0 44px 110px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.28);will-change:transform,opacity}}
+.arch-rail .card{{max-width:90%}}
+.arch-hero .card{{background:none;border:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0 10px;max-width:94%}}
+.arch-hero .lh{{font-size:{int(A['lg']*1.12)}px;letter-spacing:-2.4px}}
+.arch-hero .cvec{{justify-content:center}}
 .cvec{{display:flex;gap:16px;margin-bottom:20px}}
 .cvec .cv{{display:inline-flex;align-items:center;justify-content:center;width:62px;height:62px;border-radius:16px;
  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#FFD98A;
@@ -212,9 +287,9 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .lh{{font-family:{disp};font-size:{int(A['lg']*0.92)}px;font-weight:900;line-height:1.0;letter-spacing:-1.8px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
 .lh b{{color:#FFC21E}} .lh b.punch{{background:linear-gradient(90deg,#FFD54A,#FF8A3D);-webkit-background-clip:text;background-clip:text;color:transparent}}
 .acc-halo .lh b.punch{{filter:drop-shadow(0 0 22px rgba(255,190,11,.45))}}
-.acc-beam .scene{{border-left:3px solid rgba(255,190,11,.55)}}
+.acc-beam .arch-card>.card,.acc-beam .arch-rail>.card{{border-left:3px solid rgba(255,190,11,.55)}}
 .acc-underline .lh{{padding-bottom:8px;border-bottom:2px solid rgba(255,190,11,.32)}}
-.acc-ring .scene{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
+.acc-ring .arch-card>.card,.acc-ring .arch-rail>.card{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
 .lsub{{margin-top:22px;font-size:{A['sub']-2}px;font-weight:500;line-height:1.4;color:rgba(255,255,255,.85);max-width:820px}}
 .lsub b{{color:#fff;font-weight:700}}
 .lsplit{{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:26px}}
@@ -257,6 +332,12 @@ function wipeClip(u){{var p=100*(1-u);
   if(WIPE==='right')return 'inset(0 0 0 '+p.toFixed(1)+'% round 36px)';
   if(WIPE==='up')return 'inset('+p.toFixed(1)+'% 0 0 0 round 36px)';
   return 'inset('+(p*0.62).toFixed(1)+'% '+(p*0.62).toFixed(1)+'% 0 0 round 36px)';}}
+// kinetic data-viz: numeric punch words count up (Rs 0 -> Rs 90,000 ; 0% -> 50% ; 0 -> 1,000)
+function parseNum(s){{var m=s.match(/^([^0-9]*)([0-9][0-9,]*)(.*)$/);if(!m)return null;
+  var d=m[2];return {{pre:m[1],n:parseInt(d.replace(/,/g,''),10),suf:m[3],comma:d.indexOf(',')>=0}};}}
+function fmtNum(n,c){{return c?n.toLocaleString('en-US'):(''+n);}}
+var ALLPUNCH=document.querySelectorAll('.punch');
+for(var _p=0;_p<ALLPUNCH.length;_p++){{ALLPUNCH[_p].setAttribute('data-final',ALLPUNCH[_p].textContent);}}
 var FXL=document.querySelectorAll('.field .fx');
 var FIELD=document.querySelector('.field'); var FN=FIELD?FIELD.getAttribute('data-field'):'';
 var CX=FIELD?+(FIELD.getAttribute('data-cx')||0):0, CY=FIELD?+(FIELD.getAttribute('data-cy')||0):0;
@@ -291,20 +372,23 @@ function render(t){{
    bv[b2].style.opacity=(intro*(0.34+0.26*Math.abs(Math.sin(t*0.5+bp)))).toFixed(3);}}
  for(var i=0;i<TL.scenes.length;i++){{
    var s=TL.scenes[i],el=document.getElementById('s'+(i+1)); if(!el)continue;
+   var card=el.querySelector('.card')||el;
    var lo=t-s.start,ln=s.end-s.start;
    if(lo<-0.3||lo>ln+0.05){{el.style.display='none';continue;}}
-   el.style.display='block';
+   el.style.display='flex';
    var en=easeEnter(c01(lo/ENT)), ex=eIn(c01((lo-(ln-0.42))/0.42));
-   el.style.opacity=(c01(lo/0.16)*(1-ex)).toFixed(3);
-   el.style.clipPath=wipeClip(en);
-   el.style.transform='translateY('+((1-en)*(MOTION==='kinetic'?34:22) - ex*26).toFixed(1)+'px) scale('+(lerp(0.965,1,en)-ex*0.04).toFixed(3)+')';
+   card.style.opacity=(c01(lo/0.16)*(1-ex)).toFixed(3);
+   card.style.clipPath=wipeClip(en);
+   card.style.transform='translateY('+((1-en)*(MOTION==='kinetic'?34:22) - ex*26).toFixed(1)+'px) scale('+(lerp(0.965,1,en)-ex*0.04).toFixed(3)+')';
    var cv=el.querySelectorAll('.cvec .cv');
    for(var ci=0;ci<cv.length;ci++){{var cu=easeEnter(c01((lo-0.18-ci*STAG)/0.5));
      cv[ci].style.opacity=cu.toFixed(3);
      cv[ci].style.transform='translateY('+((1-cu)*16).toFixed(1)+'px) scale('+lerp(0.6,1,cu).toFixed(3)+') rotate('+(Math.sin(t*0.8+ci)*4).toFixed(1)+'deg)';}}
    var pn=el.querySelectorAll('.punch');
    for(var m=0;m<pn.length;m++){{var at=parseFloat(pn[m].getAttribute('data-at')||'0.4');var pu=eOut(c01((lo-at)/0.5));
-     pn[m].style.display='inline-block';pn[m].style.transform='scale('+lerp(0.7,1,pu).toFixed(3)+')';}}
+     pn[m].style.display='inline-block';pn[m].style.transform='scale('+lerp(0.7,1,pu).toFixed(3)+')';
+     var fin=pn[m].getAttribute('data-final');var pd=fin?parseNum(fin):null;
+     if(pd){{var cuN=eOut(c01((lo-at)/0.78));pn[m].textContent=pd.pre+fmtNum(Math.round(pd.n*cuN),pd.comma)+pd.suf;}}}}
  }}
 }}
 function getT(){{var p=new URLSearchParams(location.search);var v=parseFloat(p.get('t'));return isNaN(v)?0:v;}}
@@ -340,13 +424,14 @@ def _slide_inner(slide):
         parts.append('<div class="lcta">%s</div>' % apex_spec._cta(slide["cta"]))
     return "".join(parts)
 
-def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350, look=None):
+def build_lush_slide_html(slide, idx, total, kicker, seed, W=1080, H=1350, look=None, art=None):
     """Static single carousel slide in the dark lush look. Reuses the SAME seeded palette +
     field + art direction (grain/accent/fonts) as the video, so the carousel and video read
     as one campaign. Frozen (no render(t)), with carousel slide copy + a slide-position bar."""
     import build_today_video as V, apex_art
     seed = int(seed or 0)
-    AD = _art(seed)
+    AD = _art(seed, art)
+    arch = _slide_arch(seed, idx, total)
     ff = apex_art.fontface_css({"fonts": {"display": AD["disp"], "body": AD["body"]}})
     disp = apex_art._font_stack(AD["disp"])
     body = apex_art._font_stack(AD["body"])
@@ -386,8 +471,15 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .bvec{{position:absolute;transform:translate(-50%,-50%);color:#FFD98A;filter:drop-shadow(0 0 14px rgba(255,200,90,.6));opacity:.42}}
 .bvec .ic.accent{{color:#fff}}
 .pill{{position:absolute;z-index:5;top:54px;left:56px;padding:13px 22px;border-radius:999px;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.10);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.22)}}
-.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:300px;bottom:200px;display:flex;flex-direction:column;justify-content:center}}
-.scene{{position:relative;padding:46px 48px;border-radius:34px;background:linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);border:1px solid rgba(255,255,255,.22);box-shadow:0 40px 100px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.28)}}
+.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:280px;bottom:190px;display:flex;flex-direction:column;justify-content:center}}
+.scene{{position:relative;width:100%;display:flex;flex-direction:column;justify-content:center}}
+.scene.arch-rail{{align-items:flex-start}}
+.scene.arch-hero{{align-items:center;text-align:center}}
+.card{{position:relative;padding:46px 48px;border-radius:34px;background:linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);border:1px solid rgba(255,255,255,.22);box-shadow:0 40px 100px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.28)}}
+.arch-rail .card{{max-width:92%}}
+.arch-hero .card{{background:none;border:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0 8px;max-width:96%}}
+.arch-hero .lh{{font-size:74px;letter-spacing:-2px}}
+.arch-hero .cvec{{justify-content:center}}
 .cvec{{display:flex;gap:14px;margin-bottom:18px}}
 .cvec .cv{{display:inline-flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:15px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#FFD98A;box-shadow:0 8px 22px rgba(0,0,0,.3)}}
 .cvec .cv:nth-child(2){{color:#fff}}
@@ -398,9 +490,9 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .lh{{font-family:{disp};font-size:62px;font-weight:900;line-height:1.02;letter-spacing:-1.4px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
 .lh b{{color:#FFC21E}}
 .acc-halo .lh b{{filter:drop-shadow(0 0 18px rgba(255,190,11,.4))}}
-.acc-beam .scene{{border-left:3px solid rgba(255,190,11,.55)}}
+.acc-beam .arch-card>.card,.acc-beam .arch-rail>.card{{border-left:3px solid rgba(255,190,11,.55)}}
 .acc-underline .lh{{padding-bottom:8px;border-bottom:2px solid rgba(255,190,11,.32)}}
-.acc-ring .scene{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
+.acc-ring .arch-card>.card,.acc-ring .arch-rail>.card{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
 .lsub{{margin-top:22px;font-size:30px;font-weight:500;line-height:1.42;color:rgba(255,255,255,.85)}}
 .lsub b{{color:#fff;font-weight:700}}
 .lmeter{{margin-top:28px}}
@@ -427,7 +519,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
     body = (f'<div class="stage acc-{AD["accent"]}"><div class="mesh"></div>{field_html}'
             f'<div class="vign"></div><div class="grain"></div>{bigvec_html}'
             f'<div class="pill">{apex_spec._amp(kicker)}</div>'
-            f'<div class="cardzone"><div class="scene">{inner}</div></div>'
+            f'<div class="cardzone"><div class="scene arch-{arch}"><div class="card">{inner}</div></div></div>'
             f'<div class="dind">{dots}</div>'
             f'<div class="lock"><span>APEX IT SOLUTIONS</span><span class="dot"></span><span>APEX MARKETINGS</span></div>'
             f'</div>')

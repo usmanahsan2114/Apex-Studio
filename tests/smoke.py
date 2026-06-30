@@ -68,7 +68,7 @@ def test_lush_slide_html_markers():
     spec = apex_concept.generate()
     slide = spec["carousel"]["slides"][0]
     html = apex_lush.build_lush_slide_html(slide, 1, 5, spec["carousel"]["kicker"], seed=7)
-    for marker in ('class="scene"', 'class="lock"', "APEX IT SOLUTIONS", "APEX MARKETINGS", 'class="dind"'):
+    for marker in ('class="card"', 'class="scene arch-', 'class="lock"', "APEX IT SOLUTIONS", "APEX MARKETINGS", 'class="dind"'):
         assert marker in html, f"missing {marker} in lush slide html"
     import re
     words = re.findall(r"[A-Za-z]{4,}", slide["headline"][0].replace("**", ""))

@@ -10,6 +10,7 @@ extra/
 # ── Runtime working files ──
 day_spec.json
 art_memory.json
+design_memory.json
 
 # ── Python ──
 __pycache__/

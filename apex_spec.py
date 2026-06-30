@@ -275,6 +275,8 @@ def validate(spec):
     if "seed" in spec:
         try: int(spec["seed"])
         except Exception: e.append("seed must be an integer")
+    if spec.get("art_direction") is not None and not isinstance(spec.get("art_direction"), dict):
+        e.append("art_direction must be an object when present")
     _look = spec.get("look") or spec.get("style")
     if _look and _look != "auto":
         try:

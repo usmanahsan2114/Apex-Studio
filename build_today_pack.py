@@ -273,7 +273,7 @@ def render_slide(look, theme, idx, total, inner):
     os.remove(raw)
     return img
 
-def render_slides_lush(slides, kicker, seed, look=None):
+def render_slides_lush(slides, kicker, seed, look=None, art=None):
     """Render the 5 carousel slides in the dark lush look (matches the video).
     Uses the fast_render Chrome (with the GL backend the glassmorphism blur needs),
     one persistent instance for all slides."""
@@ -284,7 +284,7 @@ def render_slides_lush(slides, kicker, seed, look=None):
     try:
         ch.cmd("Emulation.setDeviceMetricsOverride", {"width": W, "height": H, "deviceScaleFactor": 2, "mobile": False})
         for i, slide in enumerate(slides):
-            html = apex_lush.build_lush_slide_html(slide, i + 1, len(slides), kicker, seed, W, H, look=look)
+            html = apex_lush.build_lush_slide_html(slide, i + 1, len(slides), kicker, seed, W, H, look=look, art=art)
             tmp = os.path.join(tempfile.gettempdir(), f"apex_lush_slide_{i + 1}.html")
             with open(tmp, "w", encoding="utf-8") as f: f.write(html)
             ch.cmd("Page.navigate", {"url": "file:///" + tmp.replace("\\", "/")}); ch.wait_load()
@@ -335,11 +335,13 @@ def cleanup_output():
 import apex_art
 LOOK = None
 RAW_SLIDES = None   # raw slide dicts (for the lush carousel path; classic path uses SLIDES html)
+ART = None          # pinned art_direction (anti-repeat axes), shared with the video
 _spec_path = os.environ.get("APEX_SPEC")
 if _spec_path and os.path.exists(_spec_path):
     import apex_spec
     _spec = apex_spec.load(_spec_path)
     LOOK = apex_art.choose_look(_spec, kind="carousel")
+    ART = _spec.get("art_direction")
     if _spec.get("carousel"):
         _c = _spec["carousel"]
         KICKER = _c["kicker"]
@@ -370,7 +372,7 @@ if __name__ == "__main__":
             LOOK = apex_art.choose_look(_sp, kind="carousel")
             LINKEDIN_CAPTION, FB_CAPTION = apex_spec.carousel_captions(_sp["carousel"])
         print("art-direction: LUSH dark | seed", LOOK["seed"], "| concept", kicker, flush=True)
-        imgs = render_slides_lush(slides, kicker, LOOK["seed"], look=LOOK)
+        imgs = render_slides_lush(slides, kicker, LOOK["seed"], look=LOOK, art=ART)
         _save_set(imgs, "dark")
         for plat in ("linkedin", "fb"):   # drop stale classic light set so the pack is one uniform dark look
             ld = os.path.join(OUT, f"{plat}-light")
