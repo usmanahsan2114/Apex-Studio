@@ -192,11 +192,43 @@ def scaffold_audio():
     print("  present now: %d music files, %d sfx -> renderer uses them if any, else procedural fallback." % (nm, ns))
     return 0
 
+LOTTIE_URL = "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js"
+LOTTIE_README = (
+    "Apex Studio — Lottie motion-graphics (optional, opt-in via APEX_LOTTIE=1).\n"
+    "Drop free-for-commercial Lottie JSON here; the renderer scrubs them deterministically\n"
+    "(goToAndStop). Empty = no Lottie (the rich 2D/3D look stands).\n\n"
+    "  assets/lottie/*.json   (seeded per beat)\n"
+    "  Free source: https://lottiefiles.com/ (Lottie Simple License, no attribution).\n"
+    "  lottie-web (Apache-2.0) is vendored at assets/vendor/lottie.min.js by `fetch_assets.py --lottie`.\n"
+)
+def scaffold_lottie():
+    import glob
+    vend = os.path.join(ROOT, "assets", "vendor")
+    os.makedirs(vend, exist_ok=True)
+    lib = os.path.join(vend, "lottie.min.js")
+    if not os.path.exists(lib):
+        try:
+            with open(lib, "wb") as f:
+                f.write(_get(LOTTIE_URL))
+            print("  - vendored lottie.min.js")
+        except Exception as ex:
+            print(f"  ! lottie-web fetch failed: {ex} (drop it at assets/vendor/lottie.min.js)")
+    else:
+        print("  - lottie.min.js already present")
+    ld = os.path.join(ROOT, "assets", "lottie"); os.makedirs(ld, exist_ok=True)
+    with open(os.path.join(ROOT, "assets", "LOTTIE_README.txt"), "w", encoding="utf-8") as f:
+        f.write(LOTTIE_README)
+    n = len(glob.glob(os.path.join(ld, "*.json")))
+    print("lottie: scaffolded assets/lottie/ (see assets/LOTTIE_README.txt); %d JSON present." % n)
+    return 0
+
 def main():
     if "--verify" in sys.argv:
         return verify()
     if "--audio" in sys.argv:
         return scaffold_audio()
+    if "--lottie" in sys.argv:
+        return scaffold_lottie()
     dry = "--dry-run" in sys.argv
     print("Apex Studio asset refresh")
     print("fonts:", ", ".join(FONT_CSS))
