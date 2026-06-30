@@ -224,6 +224,50 @@ window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)retur
 };
 """
 
+MOTIF_JS_DRAW = r"""
+window.motifSet=function(i,p){var w=document.getElementById('motif');if(!w)return;
+ var k=window.MS?MS.indexOf(i):(i==0?0:i==2?1:-1);if(k<0){w.style.opacity=0;return;}
+ var u=(k>=1)?E.outCubic(c01((p-0.1)/0.75)):0;
+ w.style.opacity=1;w.style.transform='translateX(-50%) scale('+(1+0.05*u)+')';
+ var ds=w.querySelectorAll('.draw');for(var j=0;j<ds.length;j++){var L=ds[j].getTotalLength?ds[j].getTotalLength():260;ds[j].style.strokeDasharray=L;ds[j].style.strokeDashoffset=(L*(1-u)).toFixed(1);}
+ var rs=w.querySelectorAll('.rise');for(var r=0;r<rs.length;r++){var ru=E.outBack(c01((p-0.12-r*.08)/.55));rs[r].style.opacity=c01(ru).toFixed(3);rs[r].setAttribute('transform','translate(0 '+((1-ru)*28).toFixed(1)+')');}
+};
+"""
+
+def motif_stopwatch(P):
+    return (f'<svg width="320" height="320" viewBox="0 0 320 320" fill="none">'
+            f'<path class="draw" d="M160 56a104 104 0 1 1 0 208 104 104 0 0 1 0-208Z" stroke="{P["hairline"]}" stroke-width="9"/>'
+            f'<path class="draw" d="M128 24h64M160 56V24M160 160l48-42" stroke="{P["amber"]}" stroke-width="10" stroke-linecap="round"/>'
+            f'<circle class="rise" cx="160" cy="160" r="12" fill="{P["amber"]}"/></svg>')
+
+def motif_shield_check(P):
+    return (f'<svg width="320" height="320" viewBox="0 0 320 320" fill="none">'
+            f'<path class="draw" d="M160 34 256 72v76c0 72-48 118-96 140-48-22-96-68-96-140V72Z" stroke="{P["text_primary"]}" stroke-width="9" stroke-linejoin="round"/>'
+            f'<path class="draw" d="m116 160 32 32 64-76" stroke="{P["amber"]}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+def motif_network_nodes(P):
+    lines = '<path class="draw" d="M94 92 190 76 238 158 164 226 76 180 94 92 238 158 76 180 190 76 164 226"'
+    nodes = ''.join(f'<circle class="rise" cx="{x}" cy="{y}" r="13" fill="{P["amber"] if i==2 else P["text_primary"]}"/>' for i,(x,y) in enumerate([(94,92),(190,76),(238,158),(164,226),(76,180)]))
+    return f'<svg width="320" height="320" viewBox="0 0 320 320" fill="none">{lines} stroke="{P["hairline"]}" stroke-width="4" stroke-linecap="round"/>{nodes}</svg>'
+
+def motif_stack_layers(P):
+    return (f'<svg width="340" height="300" viewBox="0 0 340 300" fill="none">'
+            f'<path class="rise" d="M170 36 292 98 170 160 48 98Z" fill="{P["amber"]}" opacity=".95"/>'
+            f'<path class="rise" d="M48 144 170 206 292 144" stroke="{P["text_primary"]}" stroke-width="10" stroke-linejoin="round"/>'
+            f'<path class="rise" d="M48 192 170 254 292 192" stroke="{P["hairline"]}" stroke-width="10" stroke-linejoin="round"/></svg>')
+
+def motif_cursor_click(P):
+    return (f'<svg width="320" height="320" viewBox="0 0 320 320" fill="none">'
+            f'<path class="draw" d="M92 46 230 176l-74 8 38 80-40 18-36-78-52 52Z" stroke="{P["text_primary"]}" stroke-width="9" stroke-linejoin="round"/>'
+            f'<path class="draw" d="M228 68 254 42M250 112h42M198 50V10" stroke="{P["amber"]}" stroke-width="9" stroke-linecap="round"/></svg>')
+
+def motif_signal_bars(P):
+    bars = ''.join(f'<rect class="rise" x="{70+i*46}" y="{220-h}" width="30" height="{h}" rx="7" fill="{P["amber"] if i==4 else P["text_primary"]}" opacity=".92"/>' for i,h in enumerate([46,76,112,150,190]))
+    return f'<svg width="340" height="280" viewBox="0 0 340 280" fill="none"><line x1="56" y1="220" x2="286" y2="220" stroke="{P["hairline"]}" stroke-width="3"/>{bars}</svg>'
+
+def compose_motif(names):
+    return [{"motif_name": n, "name": n, "left": 38 + i * 16, "top": 42 + (i % 2) * 14, "scale": 0.46} for i, n in enumerate(names or [])]
+
 CONCEPTS = {
     "site_speed": dict(
         id="site_speed",
@@ -335,6 +379,12 @@ MOTIFS = {
     "arrow_up": (motif_arrow, MOTIF_JS_ARROW),
     "roi_coins": (motif_coins, MOTIF_JS_COINS),
     "radar_sweep": (motif_radar, MOTIF_JS_RADAR),
+    "stopwatch": (motif_stopwatch, MOTIF_JS_DRAW),
+    "shield_check": (motif_shield_check, MOTIF_JS_DRAW),
+    "network_nodes": (motif_network_nodes, MOTIF_JS_DRAW),
+    "stack_layers": (motif_stack_layers, MOTIF_JS_DRAW),
+    "cursor_click": (motif_cursor_click, MOTIF_JS_DRAW),
+    "signal_bars": (motif_signal_bars, MOTIF_JS_DRAW),
     "none": (lambda P: "", ""),
 }
 
@@ -350,6 +400,12 @@ MOTIF_KEYWORDS = {
     "arrow_up":      ["rise", "rising", "higher", "boost", "lift", "go up", "grow"],
     "roi_coins":     ["cost", "price", "budget", "spend", "money", "cheap", "invoice", "roi", "rupee", "rs "],
     "radar_sweep":   ["audit", "scan", "detect", "find", "hidden", "invisible", "discover", "reveal"],
+    "stopwatch":     ["time", "deadline", "late", "delay", "response", "wait"],
+    "shield_check":  ["trust", "proof", "secure", "risk", "quality", "guarantee"],
+    "network_nodes": ["system", "network", "connected", "stack", "pipeline", "integration"],
+    "stack_layers":  ["layers", "foundation", "architecture", "build", "asset"],
+    "cursor_click":  ["click", "landing", "cta", "conversion", "tap"],
+    "signal_bars":   ["signal", "reach", "visibility", "attention", "content", "posting"],
 }
 
 import random as _random

@@ -3,7 +3,7 @@ flask
 kokoro-onnx
 soundfile
 imageio-ffmpeg
-numpy==1.26.2
+numpy>=1.26,<3   # was ==1.26.2; that has no wheel for Python 3.13. Code uses only stable APIs (runs on numpy 2.x).
 scipy
 Pillow
 # Also required (already on a typical Windows box): Google Chrome (for rendering)

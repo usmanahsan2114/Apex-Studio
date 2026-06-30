@@ -11,6 +11,7 @@ Optional: paste an API key to let the GUI call the LLM itself; or use a plain br
 import json, os, queue, re, sys, threading, uuid, webbrowser
 from flask import Flask, request, Response, jsonify, send_from_directory
 import apex_spec
+import apex_art
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, "generated_images")
@@ -59,7 +60,7 @@ def api_generate():
     py = sys.executable; cmds = []
     if mode in ("image", "both") and spec.get("carousel"): cmds.append([py, os.path.join(ROOT, "build_today_pack.py")])
     if mode in ("video", "both") and spec.get("video"):
-        vargs = [py, os.path.join(ROOT, "build_today_video.py")]
+        vargs = [py, os.path.join(ROOT, "build_today_video.py" if d.get("video_smoke") else "fast_render.py")]
         if d.get("video_smoke"): vargs.append("smoke")
         cmds.append(vargs)
     if not cmds: return jsonify({"ok": False, "errors": ["nothing to generate for this mode/spec"]}), 400
@@ -91,7 +92,35 @@ def api_validate():
     if isinstance(spec, dict):
         if spec.get("carousel"): summ["carousel"] = {"kicker": spec["carousel"].get("kicker"), "slides": len(spec["carousel"].get("slides", []))}
         if spec.get("video"): summ["video"] = {"kicker": spec["video"].get("kicker"), "beats": len(spec["video"].get("scenes", [])), "motif": spec["video"].get("motif_name")}
+        try:
+            look = apex_art.choose_look(spec, kind="video")
+            summ["art"] = {"look": look.get("lookbook"), "font": look.get("fonts", {}).get("name"),
+                           "layout": look.get("layout", {}).get("template"),
+                           "tone": look.get("grade", {}).get("tone"),
+                           "d3": look.get("d3", {}).get("mode")}
+        except Exception:
+            pass
     return jsonify({"ok": ok, "errors": errs, "summary": summ})
+
+@app.post("/api/assets/refresh")
+def api_assets_refresh():
+    try:
+        import subprocess
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "fetch_assets.py")], cwd=ROOT,
+                           capture_output=True, text=True, timeout=600)
+        return jsonify({"ok": p.returncode == 0, "output": (p.stdout or "") + (p.stderr or "")})
+    except Exception as ex:
+        return jsonify({"ok": False, "output": str(ex)}), 500
+
+@app.post("/api/test3d")
+def api_test3d():
+    try:
+        import subprocess
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "fast_render.py"), "test3d"], cwd=ROOT,
+                           capture_output=True, text=True, timeout=180)
+        return jsonify({"ok": p.returncode == 0, "output": (p.stdout or "") + (p.stderr or "")})
+    except Exception as ex:
+        return jsonify({"ok": False, "output": str(ex)}), 500
 
 @app.get("/api/prompt")
 def api_prompt():
@@ -103,6 +132,17 @@ def api_prompt():
 @app.get("/api/example")
 def api_example():
     return Response(open(EXAMPLE, encoding="utf-8").read() if os.path.exists(EXAMPLE) else "{}", mimetype="application/json")
+
+@app.post("/api/surprise")
+def api_surprise():
+    """Free, offline: generate a fresh random on-brand day_spec (random script + look)."""
+    try:
+        import apex_concept, datetime
+        spec = apex_concept.generate(date=datetime.date.today().isoformat())
+        with open(SPEC_PATH, "w", encoding="utf-8") as f: json.dump(spec, f, ensure_ascii=False, indent=2)
+        return jsonify({"ok": True, "spec": spec})
+    except Exception as ex:
+        return jsonify({"ok": False, "error": str(ex)}), 500
 
 @app.post("/api/llm")
 def api_llm():
@@ -194,6 +234,7 @@ small{color:#777e89}
     <h2>1 · Get today's script</h2>
     <div class="row"><input id="topic" placeholder="(optional) today's topic / angle…"></div>
     <div class="row" style="margin-top:10px"><button class="amberbtn" onclick="copyPrompt()">Copy GPT Prompt</button>
+      <button class="amberbtn" onclick="surprise()">✨ Surprise me (free)</button>
       <button class="btn" onclick="loadExample()">Load example JSON</button></div>
     <small>Paste the prompt into GPT (Pro). It returns a <b>day_spec JSON</b> — paste that on the right →</small>
 
@@ -227,7 +268,10 @@ small{color:#777e89}
       <button class="amberbtn" onclick="gen('image')">Generate Image</button>
       <button class="amberbtn" onclick="gen('video')">Generate Video</button>
       <button class="amberbtn" onclick="gen('both')">Generate Both</button>
-      <span class="muted" style="margin-left:8px;font-size:12px">image ≈1 min · video ≈30–45 min (live progress below)</span>
+      <button class="btn" onclick="fastSmoke()">Fast smoke</button>
+      <button class="btn" onclick="refreshAssets()">Refresh assets</button>
+      <button class="btn" onclick="test3d()">3D gate</button>
+      <span class="muted" style="margin-left:8px;font-size:12px">image ≈1 min · video uses fast renderer (live progress below)</span>
       <span style="flex:1"></span>
       <select id="ovtheme"><option value="">theme: spec</option><option value="dark">dark</option><option value="light">light</option></select>
       <select id="ovmood"><option value="">music: spec</option><option>driving</option><option>uplift</option><option>tense</option></select>
@@ -248,8 +292,9 @@ const $=s=>document.querySelector(s);
 function tab(m){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.m===m));$('#m-key').classList.toggle('hide',m!=='key');$('#m-brief').classList.toggle('hide',m!=='brief');}
 async function copyPrompt(){const t=encodeURIComponent($('#topic').value||'');const r=await fetch('/api/prompt?topic='+t);const txt=await r.text();await navigator.clipboard.writeText(txt);toast('Prompt copied — paste it into GPT.');}
 async function loadExample(){const r=await fetch('/api/example');$('#spec').value=JSON.stringify(await r.json(),null,2);validate();}
+async function surprise(){toast('Generating a fresh concept…');const r=await fetch('/api/surprise',{method:'POST'});const j=await r.json();if(j.ok){$('#spec').value=JSON.stringify(j.spec,null,2);validate();toast('Fresh concept ready — Generate to render.');}else toast('Error: '+j.error);}
 function getSpec(){try{return JSON.parse($('#spec').value)}catch(e){return $('#spec').value}}
-async function validate(){const r=await fetch('/api/validate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:$('#spec').value})});const j=await r.json();const el=$('#vres');if(j.ok){el.className='ok';el.textContent='✔ valid — '+JSON.stringify(j.summary);}else{el.className='err';el.textContent='✗ '+(j.errors||[]).join('; ');}return j.ok;}
+async function validate(){const r=await fetch('/api/validate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:$('#spec').value})});const j=await r.json();const el=$('#vres');if(j.ok){el.className='ok';el.textContent='valid - '+JSON.stringify(j.summary);}else{el.className='err';el.textContent='x '+(j.errors||[]).join('; ');}return j.ok;}
 async function llm(){const body={provider:$('#prov').value,key:$('#key').value,brief:$('#brief').value};toast('Calling model…');const r=await fetch('/api/llm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(j.ok){$('#spec').value=JSON.stringify(j.spec,null,2);validate();toast('Spec generated.');}else toast('LLM error: '+j.error);}
 function briefTemplate(){const t=$('#btopic').value||'your topic';const sk={id:t.toLowerCase().replace(/\W+/g,'_').slice(0,24),topic:t,theme:'dark',carousel:{kicker:'EDIT System',slides:[{motif:'A -> B',headline:['Hook line 1','**amber** line 2'],sub:'one short line'},{tag:'The problem',headline:['Problem line'],sub:'why it hurts',meter:{head:'',left:'',right:''}},{headline:['Reframe','the **insight**'],sub:'support'},{tag:'The fix',headline:['Fix it','then **scale**'],build_chips:['Apex IT thing','Apex IT thing'],growth_chips:['Apex Mktg thing','Apex Mktg thing']},{headline:['Payoff line'],sub:'in that order.',cta:'DM "AUDIT" — free.'}],linkedin:{caption:'LinkedIn caption…',hashtags:['#B2BMarketing','#WebDevelopment','#SEO']},fb:{caption:'FB caption…',hashtags:['#smallbusinesspakistan','#founders','#digitalmarketing']}},video:{kicker:'EDIT System',music_mood:'driving',motif_name:'none',motif_scenes:[],narration:[{text:'Line 1.',speed:1.0},{text:'Line 2.',speed:1.0},{text:'Line 3.',speed:1.0},{text:'Line 4.',speed:1.0},{text:'Line 5. Apex IT builds; Apex Marketings turns it into demand.',speed:1.0},{text:'DM AUDIT.',speed:1.0}],scenes:[{headline:['Hook','**amber**'],big:true},{tag:'Problem',headline:['Problem']},{headline:['Reframe','**insight**'],big:true},{headline:['So','**fix it**']},{tag:'The fix',headline:['Fix','**once**'],build_chips:['IT a','IT b'],growth_chips:['Mktg a','Mktg b']},{headline:['Payoff'],cta:'DM "AUDIT" — free.'}],caption:'Video caption…'}};$('#spec').value=JSON.stringify(sk,null,2);validate();}
 let es=null;
@@ -264,6 +309,9 @@ async function gen(mode){if(!await validate())return;$('#log').textContent='';$(
    if(/wrote .*\//.test(m.line)){$('#pbar').dataset.s=(+$('#pbar').dataset.s||0)+25;$('#pbar').style.width=Math.min(100,+$('#pbar').dataset.s)+'%';}
  }if(m.done){es.close();$('#pbar').style.width='100%';toast('Done ('+m.status+')');loadOutputs();}};
 }
+async function fastSmoke(){if(!await validate())return;$('#log').textContent='';const body={mode:'video',spec:$('#spec').value,video_smoke:true,overrides:{theme:$('#ovtheme').value,music_mood:$('#ovmood').value}};const r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!j.ok){toast('x '+(j.errors||[]).join('; '));return;}if(es)es.close();es=new EventSource('/api/stream/'+j.job);es.onmessage=e=>{const m=JSON.parse(e.data);if(m.line!=null)log(m.line);if(m.done){es.close();toast('Smoke '+m.status);loadOutputs();}};}
+async function refreshAssets(){toast('Refreshing assets...');const r=await fetch('/api/assets/refresh',{method:'POST'});const j=await r.json();log((j.output||'').trim());toast(j.ok?'Assets ready':'Asset refresh failed');}
+async function test3d(){toast('Running 3D gate...');const r=await fetch('/api/test3d',{method:'POST'});const j=await r.json();log((j.output||'').trim());toast(j.ok?'3D gate passed':'3D gate failed');}
 function log(s){const l=$('#log');l.textContent+=s+'\n';l.scrollTop=l.scrollHeight;}
 async function openFolder(){await fetch('/api/open',{method:'POST'});}
 async function loadOutputs(){const r=await fetch('/api/outputs');const j=await r.json();const p=$('#preview');let h='';const b=Date.now();

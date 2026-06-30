@@ -22,6 +22,8 @@ env/
 
 # ── Scratch / temp ──
 _*.png
+_*.jpg
+_*.jpeg
 _*.wav
 _smoke_*.png
 *.log

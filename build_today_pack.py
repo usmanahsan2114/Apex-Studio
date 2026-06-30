@@ -134,17 +134,26 @@ def dots_ind(P, idx, total):
 
 def doc(look, theme, idx, total, inner):
     import apex_art
+    import apex_icons
     if look is None: look = apex_art.choose_look({}, kind="carousel")
     P = apex_art.palette_for(look, theme)
     layers_css = apex_art.world_css(look, theme, W, H)      # background world + accents (per look)
     layers_html = apex_art.world_html(look, theme, W, H, idx)
+    font_css = apex_art.fontface_css(look)
+    icon_css = apex_icons.css(P)
+    layout_over = apex_art.layout_css(look, W, H, kind="carousel")
+    d3_css = apex_art.d3_css(look, theme)
+    d3_html = apex_art.d3_html(look, theme)
     type_over = apex_art.type_css(look)                     # headline weight/tracking/scale + align
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page {{ margin:0; }} * {{ box-sizing:border-box; margin:0; padding:0; }}
 html,body {{ width:{W}px; height:{H}px; }}
+{font_css}
 body {{ font-family:'Segoe UI','Inter',Arial,sans-serif; background:{P['base']}; color:{P['text_primary']}; -webkit-font-smoothing:antialiased; overflow:hidden; }}
 .canvas {{ position:relative; width:{W}px; height:{H}px; background:{P['bg_grad']}; padding:70px 78px 62px; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; overflow:hidden; }}
 {layers_css}
+{icon_css}
+{d3_css}
 
 .head {{ position:relative; z-index:3; display:flex; flex-direction:column; align-items:center; gap:14px; }}
 .kicker {{ font-size:15px; font-weight:700; letter-spacing:4px; color:{P['text_tertiary']}; text-transform:uppercase; }}
@@ -197,9 +206,11 @@ body {{ font-family:'Segoe UI','Inter',Arial,sans-serif; background:{P['base']};
 .bname {{ font-size:17px; font-weight:800; letter-spacing:1.3px; color:{P['text_primary']}; text-transform:uppercase; }}
 .xsep {{ font-size:15px; color:{P['text_tertiary']}; font-weight:600; padding:0 4px; }}
 {type_over}
+{layout_over}
 </style></head><body>
 <div class="canvas">
   {layers_html}
+  {d3_html}
   <div class="head"><div class="kicker">{KICKER}</div><div class="splitbar"><span class="n"></span><span class="a"></span></div></div>
   <div class="body">{inner}</div>
   <div class="foot">
