@@ -56,8 +56,12 @@ def _free_port():
 class Chrome:
     def __init__(self):
         self.port = _free_port()
+        # Unique profile per run: a fixed dir lets a zombie Chrome (e.g. from an interrupted
+        # render) hold its SingletonLock and refuse every later launch (WinError 10061).
+        self.profile = f"{PROFILE}_{os.getpid()}_{self.port}"
+        shutil.rmtree(self.profile, ignore_errors=True)
         args = [CHROME, f"--remote-debugging-port={self.port}", "--remote-allow-origins=*",
-                f"--user-data-dir={PROFILE}"] + (WEBGL_FLAGS if LUSH else FAST_FLAGS) + ["about:blank"]
+                f"--user-data-dir={self.profile}"] + (WEBGL_FLAGS if LUSH else FAST_FLAGS) + ["about:blank"]
         self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._wait_ready()
         page = self._http("PUT", "/json/new?about:blank")
@@ -104,6 +108,8 @@ class Chrome:
         except Exception:
             try: self.proc.kill()
             except Exception: pass
+        try: shutil.rmtree(self.profile, ignore_errors=True)
+        except Exception: pass
 
 def encode_jpg(aspect, fdir, audio):
     """Same as build_today_video.encode but reads frame_%05d.jpg intermediates."""
