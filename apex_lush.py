@@ -295,6 +295,16 @@ def build_lush_html(aspect, concept, tl):
         f'<div class="scene arch-{arch[i]}" id="s{i+1}"><div class="card">{_scene_inner(b)}</div></div>'
         for i, b in enumerate(beats[:6]))
     kicker = concept.get("kicker", "Apex")
+    # burned sound-off captions: per-beat voiceover line, revealed word-by-word (deterministic)
+    _CAPS = os.environ.get("APEX_CAPTIONS", "1") != "0"
+    narr = (concept.get("raw_video") or {}).get("narration") or []
+    cap_html = ""
+    if _CAPS and narr:
+        def _cw(txt):
+            return " ".join('<span class="cw">%s</span>' % apex_spec._amp(w) for w in str(txt).split())
+        cap_html = '<div class="capwrap">%s</div>' % "".join(
+            '<div class="cap" id="cap%d">%s</div>' % (i + 1, _cw(n.get("text", ""))) for i, n in enumerate(narr[:6]))
+    cz_bottom = A['safe_bottom'] + (256 if cap_html else 98)   # raise the card to clear the caption band
     style = f"""
 *{{margin:0;box-sizing:border-box}}
 {ff}
@@ -312,7 +322,10 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .pill{{position:absolute;z-index:5;top:{A['safe_top']+30}px;left:60px;padding:13px 22px;border-radius:999px;font-size:16px;font-weight:800;
  letter-spacing:3px;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.10);
  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.22)}}
-.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:{A['safe_top']+128}px;bottom:{A['safe_bottom']+98}px}}
+.cardzone{{position:absolute;z-index:4;left:56px;right:56px;top:{A['safe_top']+128}px;bottom:{cz_bottom}px}}
+.capwrap{{position:absolute;z-index:5;left:64px;right:64px;bottom:{A['safe_bottom']+92}px;height:150px;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}}
+.cap{{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:29px;font-weight:600;line-height:1.34;letter-spacing:-0.2px;color:rgba(255,255,255,.97);text-shadow:0 2px 16px rgba(0,0,0,.92);display:none}}
+.cap .cw{{display:inline-block;opacity:0;will-change:opacity,transform}}
 .scene{{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end}}
 .scene.arch-rail{{align-items:flex-start}}
 .scene.arch-hero{{justify-content:center;align-items:center;text-align:center}}
@@ -360,6 +373,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
  {bigvec_html}
  <div class="pill">{kicker}</div>
  <div class="cardzone">{scene_divs}</div>
+ {cap_html}
  <div class="lock"><span>APEX IT SOLUTIONS</span><span class="dot"></span><span>APEX MARKETINGS</span></div>
  <div class="pbarw"><div class="pbar"></div></div>
 </div>
@@ -439,6 +453,18 @@ function render(t){{
      pn[m].style.display='inline-block';pn[m].style.transform='scale('+lerp(0.7,1,pu).toFixed(3)+')';
      var fin=pn[m].getAttribute('data-final');var pd=fin?parseNum(fin):null;
      if(pd){{var cuN=eOut(c01((lo-at)/0.78));pn[m].textContent=pd.pre+fmtNum(Math.round(pd.n*cuN),pd.comma)+pd.suf;}}}}
+ }}
+ var caps=document.querySelectorAll('.cap');   // burned VO captions: word-by-word reveal per beat
+ for(var qi=0;qi<caps.length;qi++){{var cs=TL.scenes[qi];
+   if(!cs){{caps[qi].style.display='none';continue;}}
+   var clo=t-cs.start,cln=cs.end-cs.start;
+   if(clo<-0.15||clo>cln+0.05){{caps[qi].style.display='none';continue;}}
+   caps[qi].style.display='block';
+   var cw=caps[qi].querySelectorAll('.cw');var cspan=cln*0.62;
+   for(var wq=0;wq<cw.length;wq++){{var wt=0.25+(wq/Math.max(1,cw.length))*cspan;
+     var wu=eOut(c01((clo-wt)/0.34));var wex=eIn(c01((clo-(cln-0.35))/0.35));
+     cw[wq].style.opacity=(wu*(1-wex)).toFixed(3);
+     cw[wq].style.transform='translateY('+((1-wu)*9).toFixed(1)+'px)';}}
  }}
 }}
 function getT(){{var p=new URLSearchParams(location.search);var v=parseFloat(p.get('t'));return isNaN(v)?0:v;}}
