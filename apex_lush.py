@@ -323,8 +323,8 @@ def _scene_inner(beat):
     if beat.get("tag"):
         parts.append('<div class="ltag">%s</div>' % apex_spec._amp(beat["tag"]))
     hl = beat.get("headline", []) or []
-    parts.append('<div class="lh">%s</div>' % "<br>".join(
-        apex_spec.bold_punch(x, str(beat.get("punch_at", "0.4"))) for x in hl))
+    parts.append('<div class="lh">%s</div>' % "".join(   # each line = a .hline block for staggered kinetic reveal
+        '<span class="hline">%s</span>' % apex_spec.bold_punch(x, str(beat.get("punch_at", "0.4"))) for x in hl))
     if beat.get("sub"):
         parts.append('<div class="lsub">%s</div>' % apex_spec.bold_static(beat["sub"]))
     mt = beat.get("meter")
@@ -432,6 +432,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .cvec .cv .ic{{width:38px;height:38px}}
 .ltag{{font-size:17px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#FFD66B;margin-bottom:16px}}
 .lh{{font-family:{disp};font-size:{int(A['lg']*0.92)}px;font-weight:900;line-height:1.0;letter-spacing:-1.8px;color:#fff;text-shadow:0 6px 36px rgba(0,0,0,.45);text-wrap:balance}}
+.lh .hline{{display:block;will-change:clip-path,transform,opacity}}
 .lh b{{color:#FFC21E}} .lh b.punch{{background:linear-gradient(90deg,#FFD54A,#FF8A3D);-webkit-background-clip:text;background-clip:text;color:transparent}}
 .acc-halo .lh b.punch{{filter:drop-shadow(0 0 22px rgba(255,190,11,.45))}}
 .acc-beam .arch-card>.card,.acc-beam .arch-rail>.card{{border-left:3px solid rgba(255,190,11,.55)}}
@@ -538,6 +539,11 @@ function render(t){{
    card.style.opacity=(c01(lo/0.16)*(1-ex)).toFixed(3);
    card.style.clipPath=wipeClip(en);
    card.style.transform='translateY('+((1-en)*(MOTION==='kinetic'?34:22) - ex*26).toFixed(1)+'px) scale('+(lerp(0.965,1,en)-ex*0.04).toFixed(3)+')';
+   var hls=el.querySelectorAll('.lh .hline');   // kinetic type: headline lines wipe+rise, staggered
+   for(var hz=0;hz<hls.length;hz++){{var hu=easeEnter(c01((lo-0.14-hz*0.13)/0.5));
+     hls[hz].style.opacity=hu.toFixed(3);
+     hls[hz].style.clipPath='inset(0 '+(100*(1-hu)).toFixed(1)+'% -14% 0)';
+     hls[hz].style.transform='translateY('+((1-hu)*16).toFixed(1)+'px)';}}
    var cv=el.querySelectorAll('.cvec .cv');
    for(var ci=0;ci<cv.length;ci++){{var cu=easeEnter(c01((lo-0.18-ci*STAG)/0.5));
      cv[ci].style.opacity=cu.toFixed(3);
