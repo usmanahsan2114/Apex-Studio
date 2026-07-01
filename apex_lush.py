@@ -140,7 +140,73 @@ def _slide_arch(seed, idx, total):
 # in deep space BEHIND the 2D field + glass cards. Gated by APEX_3D (default on for lush);
 # fully self-fallback (if three.js fails to load/init, window.T3D stays false and the 2D look stands).
 _ENABLE_3D = os.environ.get("APEX_3D", "1") != "0"
-def _three_block(seed, P, W, H):
+_ARCH3D_KW = [
+    (("coin", "cost", "roi", "money", "price", "cheap", "rupee", "rs ", "invoice", "budget", "spend", "expensive"), "coins"),
+    (("funnel", "leak", "convert", "conversion", "pipeline", "bucket", "enquir", "lead"), "funnel"),
+    (("speed", "fast", "slow", "load", "second", "lag", "latency", "uptime", "down", "minute", "reply", "wait"), "gauge"),
+    (("growth", "scale", "rank", "seo", "compound", "traffic", "ads", "rent", "outrank", "visitor", "grow", "sales"), "bars"),
+    (("trust", "shield", "secure", "reliable", "design", "brand", "premium", "quality"), "shield"),
+    (("system", "network", "node", "site", "app", "build", "stack", "platform", "integrat", "content", "post"), "network"),
+]
+# precise motif -> 3D archetype (primary signal; keyword text is only a fallback)
+_MOTIF3D = {
+    "speedometer": "gauge", "stopwatch": "gauge", "radar_sweep": "gauge", "countring": "gauge", "donut_progress": "gauge",
+    "roi_coins": "coins",
+    "funnel": "funnel",
+    "bar_grow": "bars", "growth_curve": "bars", "line_trend": "bars", "arrow_up": "bars",
+    "shield_check": "shield",
+    "network_nodes": "network", "stack_layers": "network",
+}
+def _arch3d(motif, text=""):
+    m = (motif or "").lower().strip()
+    if m in _MOTIF3D:
+        return _MOTIF3D[m]
+    t = (text or "").lower()
+    for keys, a in _ARCH3D_KW:
+        if any(k in t for k in keys):
+            return a
+    return "abstract"
+
+def _objs3d(seed, tints, arch):
+    """Deterministic object specs for a concept-matched 3D set-piece (built from primitives)."""
+    r = random.Random((int(seed) or 0) ^ 0x3D3D3D)
+    amber = "255,190,11"; t2 = tints[2] if len(tints) > 2 else tints[0]; t1 = tints[1] if len(tints) > 1 else tints[0]
+    o = []
+    if arch == "coins":
+        for i in range(8):
+            o.append(dict(g="cyl", rr=1.5, hh=0.22, x=0, y=round(-2.7 + i*0.6, 2), z=0,
+                          col=(amber if i % 2 else t2), pose="spinbob", ph=round(i*0.5, 2), sp=0.35))
+    elif arch == "funnel":
+        for i in range(7):
+            o.append(dict(g="torus", rr=round(2.5 - i*0.32, 2), tt=0.1, x=0, y=round(2.3 - i*0.66, 2), z=0,
+                          col=(amber if i == 6 else t2), pose="ring", ph=round(i*0.5, 2), sp=round(0.22 + 0.04*i, 3)))
+    elif arch == "gauge":
+        o.append(dict(g="arc", rr=2.5, tt=0.16, arc=3.9, x=0, y=-0.4, z=0, col=t2, pose="none", ph=0))
+        o.append(dict(g="box", bx=0.13, by=2.0, bz=0.13, x=0, y=-0.4, z=0.1, col=amber, pose="needle", ph=0))
+        o.append(dict(g="cyl", rr=0.28, hh=0.3, x=0, y=-0.4, z=0.15, col=amber, pose="spin", sp=0.0, ph=0))
+    elif arch == "bars":
+        for i in range(6):
+            by = round(0.9 + i*0.7, 2)
+            o.append(dict(g="box", bx=0.72, by=by, bz=0.72, x=round(-3.6 + i*1.45, 2), y=round(by/2 - 2.4, 2), z=0,
+                          col=(amber if i >= 4 else t2), pose="none", ph=0))
+    elif arch == "shield":
+        o.append(dict(g="oct", s=2.7, sy=1.45, x=0, y=0, z=0, col=amber, pose="spin", sp=0.16, ph=0))
+        o.append(dict(g="torus", rr=2.5, tt=0.06, x=0, y=0, z=-0.3, col=t2, pose="ring", sp=0.18, ph=0))
+    elif arch == "network":
+        pts = [(round(r.uniform(-3.2, 3.2), 2), round(r.uniform(-2.6, 2.6), 2), round(r.uniform(-1, 1), 2)) for _ in range(7)]
+        for i, (x, y, z) in enumerate(pts):
+            o.append(dict(g="sphere", rr=0.34, x=x, y=y, z=z, col=(amber if i % 3 == 0 else t1), pose="pulse", ph=round(i*0.7, 2)))
+        for (a2, b2) in [(i, (i+1) % len(pts)) for i in range(len(pts))] + [(0, 3), (2, 5), (1, 4)]:
+            o.append(dict(g="edge", a=list(pts[a2]), b=list(pts[b2]), col=t2, pose="none", ph=0))
+    else:
+        for _ in range(7):
+            o.append(dict(g="poly", shape=r.choice(["ico", "oct", "torus", "box", "dodec"]),
+                          x=round(r.uniform(-9, 9), 2), y=round(r.uniform(-4, 5), 2), z=round(r.uniform(-18, -7), 2),
+                          s=round(r.uniform(0.7, 2.0), 2), rx=round(r.uniform(0.04, 0.26), 3),
+                          ry=round(r.uniform(0.04, 0.26), 3), col=r.choice(tints), amp=round(r.uniform(0.3, 0.7), 2), pose="free"))
+    return o
+
+def _three_block(seed, P, W, H, concept=None):
     if not _ENABLE_3D:
         return "", ""
     import build_today_video as V
@@ -148,36 +214,51 @@ def _three_block(seed, P, W, H):
         three_src = open(os.path.join(V.ROOT, "assets", "vendor", "three.min.js"), encoding="utf-8").read()
     except Exception:
         return "", ""
-    r = random.Random((int(seed) or 0) ^ 0x3D3D3D)
-    tints = P["tints"]
-    objs = [dict(shape=r.choice(["ico", "oct", "torus", "box", "dodec"]),
-                 x=round(r.uniform(-9, 9), 2), y=round(r.uniform(-4, 5), 2), z=round(r.uniform(-18, -7), 2),
-                 s=round(r.uniform(0.7, 2.0), 2), rx=round(r.uniform(0.04, 0.26), 3),
-                 ry=round(r.uniform(0.04, 0.26), 3), col=r.choice(tints), amp=round(r.uniform(0.3, 0.7), 2))
-            for _ in range(7)]
+    rv = (concept or {}).get("raw_video") or {}
+    topic = " ".join([str((concept or {}).get("motif_name", "")), str((concept or {}).get("kicker", "")), rv.get("caption", "")]
+                     + [" ".join(b.get("headline", []) or []) for b in (rv.get("scenes") or [])]).lower()
+    arch = _arch3d((concept or {}).get("motif_name", ""), topic)
+    objs = _objs3d(seed, P["tints"], arch)
+    grouped = "true" if arch != "abstract" else "false"
+    spin_group = "false" if arch == "gauge" else "true"   # gauge is a flat dial -> face camera (needle sweeps)
     canvas = '<canvas id="t3d"></canvas>'
     js = ("<script>" + three_src + "</script>\n<script>\n(function(){try{\n"
           "var cv=document.getElementById('t3d');\n"
           "var rnd=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});\n"
           f"rnd.setSize({W},{H},false); rnd.setPixelRatio(1);\n"
-          "var scn=new THREE.Scene(); scn.fog=new THREE.FogExp2(0x06070b,0.05);\n"
+          "var scn=new THREE.Scene(); scn.fog=new THREE.FogExp2(0x06070b,0.06);\n"
           f"var cam=new THREE.PerspectiveCamera(55,{W}/{H},0.1,100); cam.position.set(0,0,9);\n"
-          "scn.add(new THREE.AmbientLight(0x44506a,0.75));\n"
-          "var dl=new THREE.DirectionalLight(0xffffff,0.55); dl.position.set(3,5,6); scn.add(dl);\n"
-          "var pl=new THREE.PointLight(0xffbe0b,1.2,42); pl.position.set(-4,2,5); scn.add(pl);\n"
-          "function geom(s){if(s==='ico')return new THREE.IcosahedronGeometry(1,0);"
-          "if(s==='oct')return new THREE.OctahedronGeometry(1,0);"
-          "if(s==='dodec')return new THREE.DodecahedronGeometry(1,0);"
-          "if(s==='torus')return new THREE.TorusGeometry(0.8,0.3,10,28);"
-          "return new THREE.BoxGeometry(1.3,1.3,1.3);}\n"
-          "var SPEC=" + json.dumps(objs) + ", M=[];\n"
-          "for(var i=0;i<SPEC.length;i++){var o=SPEC[i];var c=o.col.split(',').map(Number);\n"
-          "var mat=new THREE.MeshStandardMaterial({color:(c[0]<<16)|(c[1]<<8)|c[2],metalness:0.45,roughness:0.55,flatShading:true,transparent:true,opacity:0.62});\n"
-          "var me=new THREE.Mesh(geom(o.shape),mat); me.position.set(o.x,o.y,o.z); me.scale.set(o.s,o.s,o.s); me.userData=o; scn.add(me); M.push(me);\n"
-          "me.add(new THREE.LineSegments(new THREE.EdgesGeometry(me.geometry),new THREE.LineBasicMaterial({color:0xffd98a,transparent:true,opacity:0.28})));}\n"
-          "window.renderThreeScene=function(t){for(var i=0;i<M.length;i++){var o=M[i].userData;\n"
-          "M[i].rotation.x=t*o.rx; M[i].rotation.y=t*o.ry; M[i].position.y=o.y+Math.sin(t*0.25+i)*o.amp;}\n"
-          "cam.position.x=Math.sin(t*0.08)*1.3; cam.position.y=Math.cos(t*0.07)*0.9; cam.lookAt(0,0,-8); rnd.render(scn,cam);};\n"
+          "scn.add(new THREE.AmbientLight(0x44506a,0.8));\n"
+          "var dl=new THREE.DirectionalLight(0xffffff,0.6); dl.position.set(3,5,6); scn.add(dl);\n"
+          "var pl=new THREE.PointLight(0xffbe0b,1.3,44); pl.position.set(-4,2,6); scn.add(pl);\n"
+          "function col(c){var a=c.split(',').map(Number);return (a[0]<<16)|(a[1]<<8)|a[2];}\n"
+          "function geom(o){if(o.g==='cyl')return new THREE.CylinderGeometry(o.rr,o.rr,o.hh,40);"
+          "if(o.g==='torus')return new THREE.TorusGeometry(o.rr,o.tt,14,48);"
+          "if(o.g==='arc')return new THREE.TorusGeometry(o.rr,o.tt,14,64,o.arc);"
+          "if(o.g==='box')return new THREE.BoxGeometry(o.bx,o.by,o.bz);"
+          "if(o.g==='sphere')return new THREE.SphereGeometry(o.rr,20,16);"
+          "if(o.g==='oct')return new THREE.OctahedronGeometry(1,0);"
+          "if(o.g==='poly'){var s=o.shape;if(s==='ico')return new THREE.IcosahedronGeometry(1,0);if(s==='dodec')return new THREE.DodecahedronGeometry(1,0);if(s==='oct')return new THREE.OctahedronGeometry(1,0);if(s==='torus')return new THREE.TorusGeometry(0.8,0.3,10,28);return new THREE.BoxGeometry(1.3,1.3,1.3);}"
+          "return new THREE.BoxGeometry(1,1,1);}\n"
+          "var SPEC=" + json.dumps(objs) + ", GROUPED=" + grouped + ", SPIN=" + spin_group + ", M=[], root=new THREE.Group();\n"
+          "if(GROUPED){root.position.set(0,0.3,-4.3);root.scale.set(0.8,0.8,0.8);} scn.add(root); var parent=GROUPED?root:scn;\n"
+          "for(var i=0;i<SPEC.length;i++){var o=SPEC[i];\n"
+          "  if(o.g==='edge'){var eg=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(o.a[0],o.a[1],o.a[2]),new THREE.Vector3(o.b[0],o.b[1],o.b[2])]);\n"
+          "    parent.add(new THREE.Line(eg,new THREE.LineBasicMaterial({color:col(o.col),transparent:true,opacity:0.32}))); continue;}\n"
+          "  var g=geom(o); if(o.pose==='needle')g.translate(0,o.by/2,0);\n"
+          "  var mat=new THREE.MeshStandardMaterial({color:col(o.col),metalness:0.5,roughness:0.5,flatShading:true,transparent:true,opacity:0.47});\n"
+          "  var me=new THREE.Mesh(g,mat); if(o.s)me.scale.set(o.s,o.sy||o.s,o.s); me.position.set(o.x||0,o.y||0,o.z||0); me.userData=o;\n"
+          "  parent.add(me); M.push(me);\n"
+          "  me.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xffd98a,transparent:true,opacity:0.26})));}\n"
+          "window.renderThreeScene=function(t){ if(GROUPED&&SPIN)root.rotation.y=t*0.12; else if(GROUPED)root.rotation.y=Math.sin(t*0.12)*0.12;\n"
+          "  for(var i=0;i<M.length;i++){var m=M[i],o=m.userData;\n"
+          "    if(o.pose==='free'){m.rotation.x=t*o.rx;m.rotation.y=t*o.ry;m.position.y=o.y+Math.sin(t*0.25+i)*o.amp;}\n"
+          "    else if(o.pose==='spinbob'){m.rotation.y=t*o.sp;m.position.y=o.y+Math.sin(t*0.5+o.ph)*0.12;}\n"
+          "    else if(o.pose==='ring'){m.rotation.z=t*o.sp+o.ph;}\n"
+          "    else if(o.pose==='needle'){m.rotation.z=-1.35+(Math.sin(t*0.5)*0.5+0.5)*2.7;}\n"
+          "    else if(o.pose==='pulse'){var p=1+0.13*Math.sin(t*1.2+o.ph);m.scale.set(p,p,p);}\n"
+          "    else if(o.pose==='spin'){m.rotation.y=t*(o.sp||0.2);}}\n"
+          "  cam.position.x=Math.sin(t*0.08)*1.0; cam.position.y=Math.cos(t*0.07)*0.7; cam.lookAt(0,0.3,GROUPED?-4.3:-6); rnd.render(scn,cam);};\n"
           "window.T3D=true;\n}catch(e){window.T3D=false;}})();\n</script>")
     return canvas, js
 
@@ -276,7 +357,7 @@ def build_lush_html(aspect, concept, tl):
     P = PALETTES[rng.randrange(len(PALETTES))]
     field_name = os.environ.get("APEX_FIELD") if os.environ.get("APEX_FIELD") in FIELDS else rng.choice(FIELDS)
     field_html = _field(field_name, P, W, H, random.Random(seed ^ 0xF1E1D))
-    t3d_canvas, t3d_js = _three_block(seed, P, W, H)   # real 3D depth layer (behind field); "" if disabled/failed
+    t3d_canvas, t3d_js = _three_block(seed, P, W, H, concept)   # concept-matched 3D depth layer; "" if disabled/failed
     beats = (concept.get("raw_video") or {}).get("scenes") or []
     if not beats:
         beats = [{"headline": [s]} for s in concept.get("scenes", [])]
