@@ -246,6 +246,12 @@ def _scene_inner(beat):
         apex_spec.bold_punch(x, str(beat.get("punch_at", "0.4"))) for x in hl))
     if beat.get("sub"):
         parts.append('<div class="lsub">%s</div>' % apex_spec.bold_static(beat["sub"]))
+    mt = beat.get("meter")
+    if mt and mt.get("head"):   # animated data-viz metric bar (drawn in render(t))
+        parts.append('<div class="lmeter"><div class="lmh">%s</div>'
+                     '<div class="lmtrack"><div class="lmfill" data-tgt="84"></div><div class="lmknob" data-tgt="84"></div></div>'
+                     '<div class="lmends"><span>%s</span><span class="goal">%s</span></div></div>'
+                     % (apex_spec._amp(mt["head"]), apex_spec._amp(mt.get("left", "")), apex_spec._amp(mt.get("right", ""))))
     if beat.get("build_chips") or beat.get("growth_chips"):
         b = "".join('<span class="lchip n">%s</span>' % apex_spec._chip_label(c) for c in beat.get("build_chips", []))
         g = "".join('<span class="lchip a">%s</span>' % apex_spec._chip_label(c) for c in beat.get("growth_chips", []))
@@ -352,6 +358,13 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;font-family:{body}}}
 .acc-ring .arch-card>.card,.acc-ring .arch-rail>.card{{outline:1px solid rgba(255,190,11,.22);outline-offset:-1px}}
 .lsub{{margin-top:22px;font-size:{A['sub']-2}px;font-weight:500;line-height:1.4;color:rgba(255,255,255,.85);max-width:820px}}
 .lsub b{{color:#fff;font-weight:700}}
+.lmeter{{margin-top:24px}}
+.lmh{{font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.68);margin-bottom:12px}}
+.lmtrack{{height:8px;border-radius:5px;background:rgba(255,255,255,.12);position:relative}}
+.lmfill{{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:5px;background:linear-gradient(90deg,#fff,#FFBE0B)}}
+.lmknob{{position:absolute;left:0;top:50%;width:15px;height:15px;border-radius:50%;background:#FFBE0B;transform:translate(-50%,-50%);box-shadow:0 0 14px #FFBE0B}}
+.lmends{{display:flex;justify-content:space-between;margin-top:12px;font-size:{A['sub']-10}px;font-weight:600;color:rgba(255,255,255,.78)}}
+.lmends .goal{{color:#FFC21E}}
 .lsplit{{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:26px}}
 .lcl{{font-size:18px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#fff;margin-bottom:14px}} .lcl.am{{color:#FFC21E}}
 .lchips{{display:flex;flex-wrap:wrap;gap:10px}}
@@ -453,6 +466,9 @@ function render(t){{
      pn[m].style.display='inline-block';pn[m].style.transform='scale('+lerp(0.7,1,pu).toFixed(3)+')';
      var fin=pn[m].getAttribute('data-final');var pd=fin?parseNum(fin):null;
      if(pd){{var cuN=eOut(c01((lo-at)/0.78));pn[m].textContent=pd.pre+fmtNum(Math.round(pd.n*cuN),pd.comma)+pd.suf;}}}}
+   var mf=el.querySelector('.lmfill');   // animated data-viz metric bar
+   if(mf){{var tg=+mf.getAttribute('data-tgt')||84;var mu=eOut(c01((lo-0.35)/0.9));
+     mf.style.width=(tg*mu).toFixed(1)+'%';var mk=el.querySelector('.lmknob');if(mk)mk.style.left=(tg*mu).toFixed(1)+'%';}}
  }}
  var caps=document.querySelectorAll('.cap');   // burned VO captions: word-by-word reveal per beat
  for(var qi=0;qi<caps.length;qi++){{var cs=TL.scenes[qi];

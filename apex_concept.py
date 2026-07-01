@@ -356,7 +356,7 @@ def generate(seed=None, topic=None, date=None):
     peak_h = p.get("peak", ref_h)  # distinct beat-3 punch (never duplicate the problem headline)
     scenes = [
         {"headline": hook_h, "big": True, "punch_at": 0.32},
-        {"tag": "The problem", "headline": prob_h, "sub": prob_sub.split(".")[0] + "."},
+        {"tag": "The problem", "headline": prob_h, "sub": prob_sub.split(".")[0] + ".", "meter": meter},
         {"headline": peak_h, "big": True, "punch_at": 0.5},
         {"headline": ref_h, "big": True, "punch_at": 0.5},
         {"tag": "The fix", "headline": fix_h, "build_chips": fix_build, "growth_chips": fix_growth},
