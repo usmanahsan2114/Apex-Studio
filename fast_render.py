@@ -49,10 +49,10 @@ CRF = os.environ.get("APEX_CRF", "16")                    # H.264 quality (lower
 PRESET = os.environ.get("APEX_PRESET", "veryslow")        # final encode effort (one pass/aspect)
 CAPQ = int(os.environ.get("APEX_CAPQ", "95"))             # JPEG capture quality (near-lossless, ~2x faster than PNG)
 FRAME_EXT = "jpg"
-# cinematic color grade (ffmpeg -vf): gentle contrast/sat + teal-shadow/amber-highlight split-tone + soft vignette
-GRADE = os.environ.get("APEX_GRADE", "1") != "0"
-GRADE_VF = ("eq=contrast=1.07:saturation=1.06:brightness=0.006,"
-            "curves=b='0/0.05 0.5/0.5 1/0.93':r='0/0 0.5/0.52 1/1',vignette=PI/6")
+# cinematic color grade (ffmpeg -vf): gentle contrast/sat + teal-shadow/amber-highlight split-tone + soft vignette.
+# Defined once in build_today_video (V) so both encode paths apply an IDENTICAL grade (GRADE PARITY).
+GRADE = V.GRADE
+GRADE_VF = V.GRADE_VF
 
 def _build_html(aspect, concept, tl):
     """Lush v4 (WebGL/three.js) when APEX_LUSH, else the standard build_today_video page."""

@@ -64,6 +64,11 @@ KDIR = os.path.join(ROOT, "assets", "kokoro")
 FF = imageio_ffmpeg.get_ffmpeg_exe()
 CHROME = pack.CHROME
 FPS = int(os.environ.get("APEX_FPS", "30"))   # 30 default (+motion blur = cinematic); APEX_FPS=60 for max-smooth
+# cinematic color grade (ffmpeg -vf) — SINGLE SOURCE OF TRUTH; fast_render imports these so both
+# encode paths stay in lock-step (GRADE PARITY: IG + LinkedIn get an identical finish either way).
+GRADE = os.environ.get("APEX_GRADE", "1") != "0"
+GRADE_VF = ("eq=contrast=1.07:saturation=1.06:brightness=0.006,"
+            "curves=b='0/0.05 0.5/0.5 1/0.93':r='0/0 0.5/0.52 1/1',vignette=PI/6")
 SR, THEME = 48000, "dark"
 VOICE = "af_heart"                      # warm, natural, engaging (kokoro v1.0)
 VOICES = ["af_heart", "af_bella", "af_nicole", "am_michael", "bm_george", "am_onyx"]  # seeded variety
@@ -566,7 +571,7 @@ def encode(aspect, fdir, audio):
     A=ASPECTS[aspect]; out=os.path.join(VIDEO_DIR,A["out"])
     subprocess.run([FF,"-y","-framerate",str(FPS),"-i",os.path.join(fdir,"frame_%05d.png"),"-i",audio,
         "-map","0:v:0","-map","1:a:0","-c:v","libx264","-pix_fmt","yuv420p","-crf","18","-preset","slow",
-        "-vf",f"scale={A['w']}:{A['h']}:flags=lanczos,format=yuv420p","-r",str(FPS),
+        "-vf",f"scale={A['w']}:{A['h']}:flags=lanczos," + (GRADE_VF + "," if GRADE else "") + "format=yuv420p","-r",str(FPS),
         "-c:a","aac","-b:a","192k","-ar",str(SR),"-movflags","+faststart","-shortest",out], check=True, capture_output=True)
     return out
 def probe(mp4): return subprocess.run([FF,"-i",mp4], capture_output=True, text=True).stderr
