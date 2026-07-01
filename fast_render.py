@@ -44,7 +44,7 @@ LUSH = bool(os.environ.get("APEX_LUSH"))
 # SCALE 2 = supersampled (4x pixels -> crisp type); BLUR = motion-blur sub-samples averaged per frame.
 # Dial down for quick drafts: APEX_SCALE=1 APEX_BLUR=1 ; push hero posts: APEX_SCALE=3 APEX_BLUR=4 APEX_FPS=60.
 SCALE = max(1, int(os.environ.get("APEX_SCALE", "2")))    # MASTERPIECE default: 2 = 4x supersample (crisp AA on type/3D/field); env 3 = ultra, 1 = fast draft
-BLUR = max(1, int(os.environ.get("APEX_BLUR", "3")))      # sub-frames averaged -> cinematic motion blur (1 = off)
+BLUR = max(1, int(os.environ.get("APEX_BLUR", "2")))      # sub-frames -> motion blur; 2 @ SCALE2 ~= 5-6 hr/video. APEX_BLUR=3 = ultra (~13 hr), =1 = off/fast
 CRF = os.environ.get("APEX_CRF", "16")                    # H.264 quality (lower=better)
 PRESET = os.environ.get("APEX_PRESET", "veryslow")        # final encode effort (one pass/aspect)
 CAPQ = int(os.environ.get("APEX_CAPQ", "95"))             # JPEG capture quality (near-lossless, ~2x faster than PNG)
