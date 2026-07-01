@@ -49,6 +49,10 @@ CRF = os.environ.get("APEX_CRF", "16")                    # H.264 quality (lower
 PRESET = os.environ.get("APEX_PRESET", "veryslow")        # final encode effort (one pass/aspect)
 CAPQ = int(os.environ.get("APEX_CAPQ", "95"))             # JPEG capture quality (near-lossless, ~2x faster than PNG)
 FRAME_EXT = "jpg"
+# cinematic color grade (ffmpeg -vf): gentle contrast/sat + teal-shadow/amber-highlight split-tone + soft vignette
+GRADE = os.environ.get("APEX_GRADE", "1") != "0"
+GRADE_VF = ("eq=contrast=1.07:saturation=1.06:brightness=0.006,"
+            "curves=b='0/0.05 0.5/0.5 1/0.93':r='0/0 0.5/0.52 1/1',vignette=PI/6")
 
 def _build_html(aspect, concept, tl):
     """Lush v4 (WebGL/three.js) when APEX_LUSH, else the standard build_today_video page."""
@@ -122,11 +126,28 @@ def encode_jpg(aspect, fdir, audio):
     """Encode the PNG frame intermediates + audio to the final H.264 MP4 (lossless input,
     CRF/preset env-tunable). Frames are already at output size (downsampled in render_aspect)."""
     A = V.ASPECTS[aspect]; out = os.path.join(V.VIDEO_DIR, A["out"])
+    vf = f"scale={A['w']}:{A['h']}:flags=lanczos," + (GRADE_VF + "," if GRADE else "") + "format=yuv420p"
     subprocess.run([V.FF, "-y", "-framerate", str(V.FPS), "-i", os.path.join(fdir, f"frame_%05d.{FRAME_EXT}"),
         "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-crf", str(CRF), "-preset", PRESET, "-vf", f"scale={A['w']}:{A['h']}:flags=lanczos,format=yuv420p",
+        "-crf", str(CRF), "-preset", PRESET, "-vf", vf,
         "-r", str(V.FPS), "-c:a", "aac", "-b:a", "192k", "-ar", str(V.SR),
         "-movflags", "+faststart", "-shortest", out], check=True, capture_output=True)
+    return out
+
+def save_thumbnail(aspect, fdir, tl):
+    """Cover/poster for the video: the hook beat's settled frame, graded to match, saved to
+    generated_images/video/<aspect>_thumbnail.jpg (what platforms show before play)."""
+    hk = (tl["scenes"] or [{}])[0]
+    ht = (hk.get("start", 0) + hk.get("end", 2)) / 2.0
+    n = int(round(tl["total"] * V.FPS))
+    idx = max(0, min(n - 1, int(round(ht * V.FPS))))
+    src = os.path.join(fdir, f"frame_{idx:05d}.{FRAME_EXT}")
+    out = os.path.join(V.VIDEO_DIR, f"{aspect}_thumbnail.jpg")
+    if not os.path.exists(src):
+        return None
+    vf = (GRADE_VF + ",") if GRADE else ""
+    subprocess.run([V.FF, "-y", "-i", src, "-frames:v", "1", "-vf", vf + "format=yuvj420p", "-q:v", "2", out],
+                   check=True, capture_output=True)
     return out
 
 def render_aspect(ch, aspect, concept, tl, fdir):
@@ -247,6 +268,7 @@ def main():
             print(f"  {aspect}: {os.path.getsize(out)//1024}KB | "
                   f"{v.group(1) if v else '?'} {v.group(2) if v else '?'} {v.group(3) if v else '?'}fps | "
                   f"{a.group(1) if a else '?'} {a.group(2) if a else '?'}Hz", flush=True)
+            save_thumbnail(aspect, fdir, tl)   # cover into generated_images/video/
             shutil.rmtree(fdir)
     finally:
         ch.close()
