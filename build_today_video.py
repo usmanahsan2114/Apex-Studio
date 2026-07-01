@@ -59,7 +59,10 @@ def write_captions(concept):
 
 ROOT, OUT = pack.ROOT, pack.OUT
 VIDEO_DIR = os.path.join(OUT, "video")
-TMP = os.path.join(tempfile.gettempdir(), "apex_vid")
+# Per-run working dir (frames / html / audio), keyed by PID. CRITICAL: concurrent renders must NOT
+# share this. A fixed shared path let one run's shutil.rmtree(frames_<aspect>) wipe another run's
+# frames mid-render -> FileNotFoundError data-loss crash (observed when two daily renders overlapped).
+TMP = os.path.join(tempfile.gettempdir(), "apex_vid", f"run_{os.getpid()}")
 KDIR = os.path.join(ROOT, "assets", "kokoro")
 FF = imageio_ffmpeg.get_ffmpeg_exe()
 CHROME = pack.CHROME
@@ -579,6 +582,7 @@ def probe(mp4): return subprocess.run([FF,"-i",mp4], capture_output=True, text=T
 # ===================== AUDIO BUILD (VO + music + SFX, ducked) =====================
 def build_audio(concept):
     global _CUR_VOICE
+    os.makedirs(TMP, exist_ok=True)   # per-run dir (first writer) — build_audio runs before frame capture
     _seed=int((concept.get("look") or {}).get("seed", 0) or 0)
     _CUR_VOICE=VOICES[_seed % len(VOICES)]   # seeded voice variety (safe fallback in synth_line)
     clips=[synth_line(text, sp) for (text, sp) in concept["narration"]]
@@ -630,6 +634,7 @@ def main():
         shutil.rmtree(fdir)
     write_captions(concept)
     pack.KEEP_DIRS=set(pack.KEEP_DIRS)|{"video"}
+    shutil.rmtree(TMP, ignore_errors=True)   # drop this run's per-run working dir
     print("DONE. video/ holds:", sorted(os.listdir(VIDEO_DIR)), flush=True)
 
 if __name__=="__main__":

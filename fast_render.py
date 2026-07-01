@@ -273,6 +273,7 @@ def main():
     finally:
         ch.close()
     V.write_captions(concept)  # video.md + linkedin.md + fb.md, all in sync with this concept
+    shutil.rmtree(V.TMP, ignore_errors=True)   # drop this run's per-run working dir (frames already gone)
     print("DONE. video/ holds:", sorted(os.listdir(V.VIDEO_DIR)), flush=True)
 
 if __name__ == "__main__":
