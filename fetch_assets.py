@@ -30,6 +30,10 @@ FONT_CSS = {
     "Manrope": ("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap", "SIL OFL 1.1"),
     "Bricolage Grotesque": ("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap", "SIL OFL 1.1"),
     "Geist": ("https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800;900&display=swap", "SIL OFL 1.1"),
+    "Recursive": ("https://fonts.googleapis.com/css2?family=Recursive:wght@400;600;700;800;900&display=swap", "SIL OFL 1.1"),
+    "Roboto Flex": ("https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400..900&display=swap", "SIL OFL 1.1"),
+    "IBM Plex Sans": ("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap", "SIL OFL 1.1"),
+    "IBM Plex Serif": ("https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600;700&display=swap", "SIL OFL 1.1"),
 }
 
 LUCIDE_ICONS = [

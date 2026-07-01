@@ -48,7 +48,9 @@ WIPES = ["left", "right", "up", "diag"]                 # clip-path reveal direc
 # locked per-seed so the carousel and video of a day always share one typographic voice)
 PAIRS = [("Archivo", "Inter"), ("Sora", "Manrope"), ("Space Grotesk", "Inter"),
          ("Syne", "Manrope"), ("Fraunces", "Geist"), ("Bricolage Grotesque", "Inter"),
-         ("Geist", "Inter"), ("Sora", "Inter")]
+         ("Geist", "Inter"), ("Sora", "Inter"), ("Recursive", "Inter"),
+         ("Roboto Flex", "IBM Plex Sans"), ("IBM Plex Serif", "IBM Plex Sans"),
+         ("Space Grotesk", "IBM Plex Sans"), ("Fraunces", "IBM Plex Sans")]
 
 def _art(seed, override=None):
     """The day's art axes. Pure seed-derived by default (deterministic). If `override`
